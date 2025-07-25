@@ -2,7 +2,10 @@ import { Injectable } from '@nestjs/common';
 
 @Injectable()
 export class AppService {
-  getHello(): string {
-    return 'Hello World!';
+  getStat(): Record<string, any> {
+    return {
+      message: 'Our Pocket Api is return well',
+      date: new Date(),
+    };
   }
 }
