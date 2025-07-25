@@ -15,7 +15,7 @@ const TypeORMConfigModule = TypeOrmModule.forRootAsync({
   })
 
 @Module({
-  imports: [AuthModule, UserModule, TypeORMConfigModule, ConfigModule],
+  imports: [AuthModule, UserModule],
   controllers: [AppController],
   providers: [AppService],
 })

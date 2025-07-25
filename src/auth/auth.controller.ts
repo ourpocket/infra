@@ -5,7 +5,7 @@ import {SignInDto} from "./dto/sign-in.dto";
 import {VerifyEmailDto} from "./dto/verify-email.dto";
 import {ResetPasswordDto} from "./dto/reset-password.dto";
 
-@Controller('auth')
+@Controller({path:'auth', version: '1'})
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 

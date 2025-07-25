@@ -9,6 +9,11 @@ async function bootstrap() {
     origin: '*',
   });
 
+  app.enableVersioning({
+    type: VersioningType.URI,
+    defaultVersion: '1'
+  });
+
   const config = new DocumentBuilder()
     .setTitle('Our Pocket API')
     .setDescription('Our Pocket API')
@@ -19,10 +24,7 @@ async function bootstrap() {
   const documentFactory = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api-doc', app, documentFactory);
 
-  app.enableVersioning({
-    type: VersioningType.URI,
-    defaultVersion: '1'
-  });
+
 
   await app.listen(process.env.PORT ?? 3000);
 }
