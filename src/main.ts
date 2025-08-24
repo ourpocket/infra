@@ -11,7 +11,7 @@ async function bootstrap() {
 
   app.enableVersioning({
     type: VersioningType.URI,
-    defaultVersion: '1'
+    defaultVersion: '1',
   });
 
   const config = new DocumentBuilder()
@@ -24,8 +24,9 @@ async function bootstrap() {
   const documentFactory = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api-doc', app, documentFactory);
 
-
-
   await app.listen(process.env.PORT ?? 3000);
 }
-bootstrap();
+void bootstrap().catch((error) => {
+  console.error('Failed to start application:', error);
+  process.exit(1);
+});
