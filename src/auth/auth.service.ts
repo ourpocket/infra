@@ -2,6 +2,8 @@ import {
   BadRequestException,
   Injectable,
   UnauthorizedException,
+  InternalServerErrorException,
+  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -13,9 +15,14 @@ import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { AUTH_TYPE_ENUM } from '../enums';
 import { User } from '../entities/user.entity';
+import * as crypto from 'crypto';
+import { addMinutes } from 'date-fns';
+import { FRONTEND_URL } from 'src/constant';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
@@ -136,14 +143,90 @@ export class AuthService {
     }
 
     const payload = { sub: user.id, email: user.email, role: user.role };
-    const token = await this.jwtService.signAsync(payload);
-
-    return { token };
+    try {
+      const token = await this.jwtService.signAsync(payload);
+      return { token };
+    } catch (error) {
+      this.logger.error(
+        `Failed to sign JWT for user ${user.id}: ${error as any}`,
+      );
+      throw new InternalServerErrorException('Could not log in user');
+    }
   }
 
-  async forgottenPassword(): Promise<void> {}
+  async forgottenPassword(email: string): Promise<void> {
+    const user = await this.userRepo.findOne({ where: { email } });
 
-  async verifyEmail(verifyEmailDto: VerifyEmailDto): Promise<void> {}
+    if (!user) {
+      return;
+    }
 
-  async resetPassword(resetPasswordDto: ResetPasswordDto): Promise<void> {}
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const token = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const expiresAt = addMinutes(new Date(), 10);
+
+    user.passwordResetToken = token;
+    user.passwordResetExpires = expiresAt;
+
+    await this.userRepo.save(user);
+
+    const resetPasswordLink = `${FRONTEND_URL}/reset-password?token=${rawToken}`;
+
+    console.log(`Reset link for ${email}: ${resetPasswordLink}`);
+  }
+
+  async verifyEmail(verifyEmailDto: VerifyEmailDto): Promise<void> {
+    const { email, token } = verifyEmailDto;
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
+    const user = await this.userRepo.findOne({
+      where: {
+        email: email.toLowerCase(),
+        emailVerificationToken: hashedToken,
+      },
+    });
+
+    if (!user) {
+      throw new BadRequestException('Token is invalid or has expired');
+    }
+
+    if (
+      user.emailVerificationExpires &&
+      user.emailVerificationExpires < new Date()
+    ) {
+      throw new BadRequestException('Token is invalid or has expired');
+    }
+
+    user.isEmailVerified = true;
+    user.emailVerificationToken = null;
+    user.emailVerificationExpires = null;
+
+    await this.userRepo.save(user);
+  }
+
+  async resetPassword(resetPasswordDto: ResetPasswordDto): Promise<void> {
+    const { email, token, newPassword } = resetPasswordDto;
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
+    const user = await this.userRepo.findOne({
+      where: {
+        email: email.toLowerCase(),
+        passwordResetToken: hashedToken,
+      },
+    });
+
+    if (!user) {
+      throw new BadRequestException('Token is invalid or has expired');
+    }
+
+    if (user.passwordResetExpires && user.passwordResetExpires < new Date()) {
+      throw new BadRequestException('Token is invalid or has expired');
+    }
+
+    user.passwordHash = await bcrypt.hash(newPassword, 12);
+    user.passwordResetToken = null;
+    user.passwordResetExpires = null;
+
+    await this.userRepo.save(user);
+  }
 }

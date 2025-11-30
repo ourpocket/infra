@@ -7,6 +7,7 @@ services:
     ports:
       - "3000:3000"
     environment:
+      - NODE_ENV=development
       - DATABASE_HOST=postgres
       - DATABASE_PORT=5432
       - DATABASE_USERNAME=postgres
@@ -14,6 +15,8 @@ services:
       - DATABASE_NAME=ourpocket
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - JWT_SECRET=super-secret-key-change-in-production
+      - JWT_EXPIRES_IN=1d
     depends_on:
       - postgres
       - redis
