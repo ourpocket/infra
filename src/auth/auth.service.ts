@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
@@ -14,6 +19,7 @@ export class AuthService {
   constructor(
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    private readonly jwtService: JwtService,
   ) {}
 
   async createAccount(
@@ -100,7 +106,40 @@ export class AuthService {
     return safe as Omit<User, 'passwordHash'>;
   }
 
-  async signIn(signInDto: SignInDto): Promise<void> {}
+  async login(signInDto: SignInDto): Promise<{ token: string }> {
+    const { email, password } = signInDto;
+
+    const user = await this.userRepo.findOne({
+      where: {
+        email: email.toLowerCase(),
+      },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    if (user.provider !== AUTH_TYPE_ENUM.LOCAL) {
+      throw new BadRequestException(
+        `Please login with your ${user.provider} account`,
+      );
+    }
+
+    if (!user.passwordHash) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const isMatch = await bcrypt.compare(password, user.passwordHash);
+
+    if (!isMatch) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const payload = { sub: user.id, email: user.email, role: user.role };
+    const token = await this.jwtService.signAsync(payload);
+
+    return { token };
+  }
 
   async forgottenPassword(): Promise<void> {}
 
