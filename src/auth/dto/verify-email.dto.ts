@@ -7,12 +7,12 @@ export class VerifyEmailDto {
     example: 'user@example.com',
   })
   @IsEmail()
-  email: string;
+  email!: string;
 
   @ApiProperty({
     description: 'Verification token sent to user email',
     example: '123456',
   })
   @IsString()
-  token: string;
+  token!: string;
 }

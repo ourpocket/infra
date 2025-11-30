@@ -7,14 +7,14 @@ export class ResetPasswordDto {
     example: 'user@example.com',
   })
   @IsEmail()
-  email: string;
+  email!: string;
 
   @ApiProperty({
     description: 'Password reset token sent to user',
     example: 'resetToken123',
   })
   @IsString()
-  token: string;
+  token!: string;
 
   @ApiProperty({
     description: 'New password',
@@ -23,5 +23,5 @@ export class ResetPasswordDto {
   })
   @IsString()
   @MinLength(6)
-  newPassword: string;
+  newPassword!: string;
 }

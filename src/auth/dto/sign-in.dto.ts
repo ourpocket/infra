@@ -7,12 +7,12 @@ export class SignInDto {
     example: 'jane.doe@example.com',
   })
   @IsEmail()
-  email: string;
+  email!: string;
 
   @ApiProperty({
     description: 'Password for the user account (required for local provider)',
     example: 'StrongPassword123!',
   })
   @IsString()
-  password: string;
+  password!: string;
 }
