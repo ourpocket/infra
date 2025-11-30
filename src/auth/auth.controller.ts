@@ -17,6 +17,7 @@ import { SignInDto } from './dto/sign-in.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ResponseMessage } from '../common/decorators/response-message.decorator';
+import { MESSAGES } from '../constant';
 
 @ApiTags('Auth')
 @Controller({ path: 'auth', version: '1' })
@@ -43,7 +44,7 @@ export class AuthController {
   })
   @ApiResponse({ status: 201, description: 'User successfully registered' })
   @ApiResponse({ status: 400, description: 'Bad Request' })
-  @ResponseMessage('User successfully registered')
+  @ResponseMessage(MESSAGES.SUCCESS.USER_REGISTERED)
   createAccount(@Body() createAccountDto: CreateAccountDto) {
     return this.authService.createAccount(createAccountDto);
   }
@@ -53,7 +54,7 @@ export class AuthController {
   @ApiOperation({ summary: 'User login' })
   @ApiResponse({ status: 200, description: 'User successfully logged in' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ResponseMessage('User successfully logged in')
+  @ResponseMessage(MESSAGES.SUCCESS.LOGIN_SUCCESSFUL)
   signIn(@Body() signInDto: SignInDto) {
     return this.authService.login(signInDto);
   }
@@ -63,7 +64,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Verify email address' })
   @ApiResponse({ status: 200, description: 'Email successfully verified' })
   @ApiResponse({ status: 400, description: 'Invalid or expired token' })
-  @ResponseMessage('Email successfully verified')
+  @ResponseMessage(MESSAGES.SUCCESS.EMAIL_VERIFIED)
   verifyEmail(@Body() verifyEmailDto: VerifyEmailDto) {
     return this.authService.verifyEmail(verifyEmailDto);
   }
@@ -73,7 +74,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Reset password' })
   @ApiResponse({ status: 200, description: 'Password successfully reset' })
   @ApiResponse({ status: 400, description: 'Invalid or expired token' })
-  @ResponseMessage('Password successfully reset')
+  @ResponseMessage(MESSAGES.SUCCESS.PASSWORD_RESET)
   async resetPassword(
     @Body() resetPasswordDto: ResetPasswordDto,
   ): Promise<void> {

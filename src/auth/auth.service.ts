@@ -17,7 +17,7 @@ import { AUTH_TYPE_ENUM } from '../enums';
 import { User } from '../entities/user.entity';
 import * as crypto from 'crypto';
 import { addMinutes } from 'date-fns';
-import { FRONTEND_URL } from 'src/constant';
+import { FRONTEND_URL, MESSAGES } from '../constant';
 
 @Injectable()
 export class AuthService {
@@ -35,7 +35,7 @@ export class AuthService {
     const provider = dto.provider ?? AUTH_TYPE_ENUM.LOCAL;
 
     if (!dto.acceptTerms) {
-      throw new BadRequestException('You must accept the Terms to register');
+      throw new BadRequestException(MESSAGES.ERROR.TERMS_NOT_ACCEPTED);
     }
 
     if (provider === AUTH_TYPE_ENUM.LOCAL) {
@@ -51,14 +51,14 @@ export class AuthService {
     const { email, password, name, photoUrl, companyName, role } = dto;
 
     if (!password) {
-      throw new BadRequestException('Password is required');
+      throw new BadRequestException(MESSAGES.ERROR.PASSWORD_REQUIRED);
     }
 
     const existing = await this.userRepo.findOne({
       where: { email: email.toLowerCase() },
     });
     if (existing) {
-      throw new BadRequestException('Email already in use');
+      throw new BadRequestException(MESSAGES.ERROR.EMAIL_ALREADY_IN_USE);
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
@@ -123,34 +123,36 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException(MESSAGES.ERROR.INVALID_CREDENTIALS);
     }
 
     if (user.provider !== AUTH_TYPE_ENUM.LOCAL) {
       throw new BadRequestException(
-        `Please login with your ${user.provider} account`,
+        MESSAGES.ERROR.WRONG_PROVIDER(user.provider),
       );
     }
 
     if (!user.passwordHash) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException(MESSAGES.ERROR.INVALID_CREDENTIALS);
     }
 
     const isMatch = await bcrypt.compare(password, user.passwordHash);
 
     if (!isMatch) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException(MESSAGES.ERROR.INVALID_CREDENTIALS);
     }
 
     const payload = { sub: user.id, email: user.email, role: user.role };
     try {
       const token = await this.jwtService.signAsync(payload);
-      return { token };
+      return {
+        token,
+      };
     } catch (error) {
       this.logger.error(
         `Failed to sign JWT for user ${user.id}: ${error as any}`,
       );
-      throw new InternalServerErrorException('Could not log in user');
+      throw new InternalServerErrorException(MESSAGES.ERROR.LOGIN_FAILED);
     }
   }
 
@@ -173,6 +175,8 @@ export class AuthService {
     const resetPasswordLink = `${FRONTEND_URL}/reset-password?token=${rawToken}`;
 
     console.log(`Reset link for ${email}: ${resetPasswordLink}`);
+
+    //TODO: Send email to user.
   }
 
   async verifyEmail(verifyEmailDto: VerifyEmailDto): Promise<void> {
@@ -187,14 +191,14 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new BadRequestException('Token is invalid or has expired');
+      throw new BadRequestException(MESSAGES.ERROR.TOKEN_INVALID_OR_EXPIRED);
     }
 
     if (
       user.emailVerificationExpires &&
       user.emailVerificationExpires < new Date()
     ) {
-      throw new BadRequestException('Token is invalid or has expired');
+      throw new BadRequestException(MESSAGES.ERROR.TOKEN_INVALID_OR_EXPIRED);
     }
 
     user.isEmailVerified = true;
@@ -216,11 +220,11 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new BadRequestException('Token is invalid or has expired');
+      throw new BadRequestException(MESSAGES.ERROR.TOKEN_INVALID_OR_EXPIRED);
     }
 
     if (user.passwordResetExpires && user.passwordResetExpires < new Date()) {
-      throw new BadRequestException('Token is invalid or has expired');
+      throw new BadRequestException(MESSAGES.ERROR.TOKEN_INVALID_OR_EXPIRED);
     }
 
     user.passwordHash = await bcrypt.hash(newPassword, 12);
