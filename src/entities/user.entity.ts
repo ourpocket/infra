@@ -5,7 +5,9 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   Index,
+  OneToMany,
 } from 'typeorm';
+import { ApiKey } from './api-key.entity';
 import { AUTH_TYPE_ENUM } from '../enums';
 
 @Entity({ name: 'users' })
@@ -58,4 +60,7 @@ export class User {
 
   @UpdateDateColumn()
   updatedAt!: Date;
+
+  @OneToMany(() => ApiKey, (apiKey) => apiKey.user)
+  apiKeys!: ApiKey[];
 }

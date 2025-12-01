@@ -9,6 +9,8 @@ import {
   ConfigModule as NestConfigModule,
   ConfigService,
 } from '@nestjs/config';
+import { ApiKeyModule } from './api-key/api-key.module';
+import { ThrottlerModule } from '@nestjs/throttler';
 
 const TypeORMConfigModule = TypeOrmModule.forRootAsync({
   imports: [NestConfigModule],
@@ -23,6 +25,15 @@ const TypeORMConfigModule = TypeOrmModule.forRootAsync({
     ConfigModule,
     AuthModule,
     UserModule,
+    ApiKeyModule,
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          ttl: 60,
+          limit: 10,
+        },
+      ],
+    }),
   ],
   controllers: [AppController],
   providers: [AppService],
