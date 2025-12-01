@@ -11,6 +11,7 @@ import {
 } from '@nestjs/config';
 import { ApiKeyModule } from './api-key/api-key.module';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 
 const TypeORMConfigModule = TypeOrmModule.forRootAsync({
   imports: [NestConfigModule],
@@ -34,6 +35,7 @@ const TypeORMConfigModule = TypeOrmModule.forRootAsync({
         },
       ],
     }),
+    ScheduleModule.forRoot(),
   ],
   controllers: [AppController],
   providers: [AppService],

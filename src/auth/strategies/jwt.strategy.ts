@@ -1,9 +1,12 @@
 import { Injectable } from '@nestjs/common';
-import { JwtPayload } from '../interfaces/jwt-payload.interface';
+import { JwtPayload, JwtUser } from '../interfaces/jwt-payload.interface';
 
 @Injectable()
 export class JwtStrategy {
-  validate(payload: JwtPayload): unknown {
-    return payload;
+  validate(payload: JwtPayload): JwtUser {
+    return {
+      userId: payload.sub,
+      email: payload.email,
+    };
   }
 }
