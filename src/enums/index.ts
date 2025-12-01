@@ -3,4 +3,9 @@ enum AUTH_TYPE_ENUM {
   GOOGLE = 'google',
 }
 
-export { AUTH_TYPE_ENUM };
+enum API_ENVIROMENT {
+  PRODUCTION = 'production',
+  DEVELOPMENT = 'development',
+}
+
+export { AUTH_TYPE_ENUM, API_ENVIROMENT };
