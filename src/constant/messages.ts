@@ -4,6 +4,9 @@ export const MESSAGES = {
     LOGIN_SUCCESSFUL: 'User successfully logged in',
     EMAIL_VERIFIED: 'Email successfully verified',
     PASSWORD_RESET: 'Password successfully reset',
+    KEY_GENERATED: 'API Key generated successfully',
+    KEY_VERIFIED: 'API Key verified successfully',
+    KEY_REVOKED: 'API Key revoked successfully',
   },
   ERROR: {
     INVALID_CREDENTIALS: 'Invalid credentials',

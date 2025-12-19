@@ -18,6 +18,7 @@ import { User } from '../entities/user.entity';
 import * as crypto from 'crypto';
 import { addMinutes } from 'date-fns';
 import { FRONTEND_URL, MESSAGES } from '../constant';
+import { MailService } from 'src/mail/mail.service';
 
 @Injectable()
 export class AuthService {
@@ -27,6 +28,7 @@ export class AuthService {
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
     private readonly jwtService: JwtService,
+    private readonly mailService: MailService,
   ) {}
 
   async createAccount(
@@ -62,6 +64,11 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
+    await this.mailService.sendEmail({
+      to: email,
+      subject: 'Welcome to OurPocket!',
+      html: `<p>Hi ${name},</p><p>Thank you for signing up to OurPocket.</p>`,
+    });
 
     const user = this.userRepo.create({
       name,
