@@ -58,4 +58,53 @@ export class MailService {
 
     return data;
   }
+
+  async sendWelcomeEmail(to: string, name: string) {
+    const htmlContent = `
+      <p>Hi ${name},</p>
+      <p>Thank you for signing up to OurPocket.</p>
+    `;
+
+    return this.sendEmail({
+      to,
+      subject: 'Welcome to OurPocket!',
+      html: htmlContent,
+    });
+  }
+
+  async sendVerificationEmail(to: string, token: string) {
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL');
+    const verificationLink = `${frontendUrl}/verify-email?token=${token}`;
+
+    const htmlContent = `
+      <p>Hi,</p>
+      <p>Please verify your email by clicking the link below:</p>
+      <a href="${verificationLink}">Verify Email</a>
+      <p>If you did not request this, please ignore this email.</p>
+    `;
+
+    return this.sendEmail({
+      to,
+      subject: 'Verify Your Email',
+      html: htmlContent,
+    });
+  }
+
+  async sendPasswordResetEmail(to: string, token: string) {
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL');
+    const resetLink = `${frontendUrl}/reset-password?token=${token}`;
+
+    const htmlContent = `
+      <p>Hi,</p>
+      <p>You can reset your password by clicking the link below:</p>
+      <a href="${resetLink}">Reset Password</a>
+      <p>If you did not request this, please ignore this email.</p>
+    `;
+
+    return this.sendEmail({
+      to,
+      subject: 'Reset Your Password',
+      html: htmlContent,
+    });
+  }
 }

@@ -19,4 +19,9 @@ export const MESSAGES = {
     PASSWORD_REQUIRED: 'Password is required',
     EMAIL_ALREADY_IN_USE: 'Email already in use',
   },
+
+  AUTHENTICATION: {
+    NOT_AUTHORIZED: 'You are not authorized to perform this action',
+    NO_USER: 'User not found',
+  },
 };

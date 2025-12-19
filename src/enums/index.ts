@@ -8,4 +8,9 @@ enum API_ENVIROMENT {
   DEVELOPMENT = 'development',
 }
 
-export { AUTH_TYPE_ENUM, API_ENVIROMENT };
+enum USERS_STATUS_ENUM {
+  ACTIVE = 'active',
+  BANNED = 'banned',
+}
+
+export { AUTH_TYPE_ENUM, API_ENVIROMENT, USERS_STATUS_ENUM };

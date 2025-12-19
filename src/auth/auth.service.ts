@@ -64,11 +64,7 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-    await this.mailService.sendEmail({
-      to: email,
-      subject: 'Welcome to OurPocket!',
-      html: `<p>Hi ${name},</p><p>Thank you for signing up to OurPocket.</p>`,
-    });
+    await this.mailService.sendWelcomeEmail(email, name);
 
     const user = this.userRepo.create({
       name,
@@ -120,7 +116,7 @@ export class AuthService {
     return safe as Omit<User, 'passwordHash'>;
   }
 
-  async login(signInDto: SignInDto): Promise<{ token: string }> {
+  async login(signInDto: SignInDto) {
     const { email, password } = signInDto;
 
     const user = await this.userRepo.findOne({
@@ -149,11 +145,17 @@ export class AuthService {
       throw new UnauthorizedException(MESSAGES.ERROR.INVALID_CREDENTIALS);
     }
 
-    const payload = { sub: user.id, email: user.email, role: user.role };
+    const payload = {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+    };
     try {
       const token = await this.jwtService.signAsync(payload);
       return {
         token,
+        role: user.role,
+        status: user.status,
       };
     } catch (error) {
       this.logger.error(
@@ -239,5 +241,21 @@ export class AuthService {
     user.passwordResetExpires = null;
 
     await this.userRepo.save(user);
+  }
+
+  async requestVerificationEmail(email: string): Promise<void> {
+    const user = await this.userRepo.findOne({ where: { email } });
+
+    if (!user) {
+      throw new BadRequestException(MESSAGES.AUTHENTICATION.NO_USER);
+    }
+
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const token = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const expiresAt = addMinutes(new Date(), 10);
+    user.emailVerificationToken = token;
+    user.emailVerificationExpires = expiresAt;
+    await this.userRepo.save(user);
+    await this.mailService.sendVerificationEmail(user.email, rawToken);
   }
 }
