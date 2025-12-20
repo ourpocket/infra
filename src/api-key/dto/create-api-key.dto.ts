@@ -1,8 +1,23 @@
-import { IsEnum, IsOptional, IsString, IsDateString } from 'class-validator';
+import {
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsDateString,
+  IsInt,
+  Min,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ApiKeyScope } from '../../entities/api-key.entity';
 
 export class CreateApiKeyDto {
+  @ApiPropertyOptional({
+    description: 'Quota for this API key',
+    example: 1000,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  quota?: number;
   @ApiProperty({
     enum: ['test', 'prod'],
     description: 'The scope of the API key',

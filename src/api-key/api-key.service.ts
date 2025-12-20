@@ -34,7 +34,7 @@ export class ApiKeyService {
     userId: string,
     createApiKeyDto: CreateApiKeyDto,
   ): Promise<ApiKeyResponse> {
-    const { scope, description, expiresAt } = createApiKeyDto;
+    const { scope, description, expiresAt, quota } = createApiKeyDto;
 
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
@@ -58,6 +58,7 @@ export class ApiKeyService {
       scope,
       description,
       expiresAt,
+      quota: quota ?? 1000,
       user,
     });
 

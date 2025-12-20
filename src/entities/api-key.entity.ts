@@ -23,6 +23,12 @@ export class ApiKey {
   @Column({ nullable: true })
   description?: string;
 
+  @Column({ type: 'int', default: 1000 })
+  quota!: number;
+
+  @Column({ type: 'int', default: 0 })
+  used!: number;
+
   @Column({ type: 'timestamp', nullable: true })
   expiresAt?: Date;
 

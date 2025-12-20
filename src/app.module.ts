@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { WalletProviderModule } from './wallet-provider/wallet-provider.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
@@ -24,9 +25,7 @@ const TypeORMConfigModule = TypeOrmModule.forRootAsync({
 
 @Module({
   imports: [
-    NestConfigModule.forRoot(),
-    TypeORMConfigModule,
-    ConfigModule,
+    WalletProviderModule,
     AuthModule,
     UserModule,
     ApiKeyModule,
@@ -40,6 +39,8 @@ const TypeORMConfigModule = TypeOrmModule.forRootAsync({
     }),
     ScheduleModule.forRoot(),
     MailModule,
+    TypeORMConfigModule,
+    ConfigModule,
   ],
   controllers: [AppController, MailController],
   providers: [AppService, MailService],
