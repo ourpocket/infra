@@ -5,7 +5,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { User } from '../entities/user.entity';
-import { MailService } from 'src/mail/mail.service';
+import { MailModule } from 'src/mail/mail.module';
 
 @Module({
   imports: [
@@ -20,8 +20,9 @@ import { MailService } from 'src/mail/mail.service';
       }),
       inject: [ConfigService],
     }),
+    MailModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, MailService],
+  providers: [AuthService],
 })
 export class AuthModule {}

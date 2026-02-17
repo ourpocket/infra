@@ -1,4 +1,7 @@
+import { LedgerTransactionRequest } from '../ledger/ledger.service';
+
 export interface WalletOperationPayload {
+  ledger?: LedgerTransactionRequest;
   [key: string]: unknown;
 }
 

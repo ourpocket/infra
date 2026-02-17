@@ -14,17 +14,17 @@ import { WalletProviderService } from './wallet-provider.service';
 import { ProviderType } from '../interface/wallet-provider.interface';
 import { AddWalletProviderDto } from './dto/add-wallet-provider.dto';
 import { CreateWalletDto } from './dto/create-wallet.dto';
-import { ApiKeyService } from '../api-key/api-key.service';
-import { UserProviderService } from '../user-provider/user-provider.service';
 import { PROVIDER_TYPE_ENUM, WALLET_ACTION_ENUM } from '../enums';
 import { WalletActionDto } from './dto/wallet-action.dto';
+import { ProjectApiKeyService } from '../project/project-api-key.service';
+import { ProjectProviderService } from '../project/project-provider.service';
 
 @Controller('wallet-providers')
 export class WalletProviderController {
   constructor(
     private readonly walletProviderService: WalletProviderService,
-    private readonly apiKeyService: ApiKeyService,
-    private readonly userProviderService: UserProviderService,
+    private readonly projectApiKeyService: ProjectApiKeyService,
+    private readonly projectProviderService: ProjectProviderService,
   ) {}
 
   @Get()
@@ -122,19 +122,14 @@ export class WalletProviderController {
       throw new UnauthorizedException('API key is required');
     }
 
-    const apiKey = await this.apiKeyService.verifyApiKey(incomingKey);
-    const userId = apiKey.user.id;
+    const projectApiKey =
+      await this.projectApiKeyService.verifyProjectApiKey(incomingKey);
 
-    const userProvider = await this.userProviderService.findByTypeInternal(
-      userId,
-      provider as PROVIDER_TYPE_ENUM,
-    );
-
-    const providerApiKey = userProvider.config?.apiKey;
-
-    if (!providerApiKey || typeof providerApiKey !== 'string') {
-      throw new UnauthorizedException('Provider API key is not configured');
-    }
+    const providerApiKey =
+      await this.projectProviderService.getProviderApiKeyForProject(
+        projectApiKey.project.id,
+        provider as PROVIDER_TYPE_ENUM,
+      );
 
     return providerApiKey;
   }
