@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
 import { WalletProviderService } from './wallet-provider.service';
 import { WalletProviderController } from './wallet-provider.controller';
-import { ApiKeyModule } from '../api-key/api-key.module';
-import { UserProviderModule } from '../user-provider/user-provider.module';
+import { ProjectModule } from '../project/project.module';
+import { LedgerModule } from '../ledger/ledger.module';
 
 @Module({
-  imports: [ApiKeyModule, UserProviderModule],
+  imports: [ProjectModule, LedgerModule],
   controllers: [WalletProviderController],
   providers: [WalletProviderService],
   exports: [WalletProviderService],

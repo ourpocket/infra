@@ -3,6 +3,7 @@ import { registerAs } from '@nestjs/config';
 export default registerAs('app', () => ({
   port: parseInt(process.env.PORT || '3000', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
+  ledgerUrl: process.env.LEDGER_URL || 'http://localhost:4000',
   corsOrigin: '*',
   uploadPath: process.env.UPLOAD_PATH || './uploads',
   maxFileSize: parseInt(process.env.MAX_FILE_SIZE || '10485760', 10),

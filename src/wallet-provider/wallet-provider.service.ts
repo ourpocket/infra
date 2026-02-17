@@ -13,9 +13,12 @@ import { PaystackService } from '../services/web2/paystack.service';
 import { FlutterwaveService } from '../services/web2/flutterwave.service';
 import { PagaService } from '../services/web2/paga.service';
 import { FingraService } from '../services/web2/fingra.service';
+import { LedgerService } from '../ledger/ledger.service';
 
 @Injectable()
 export class WalletProviderService {
+  constructor(private readonly ledgerService: LedgerService) {}
+
   private providers: WalletProvider[] = [
     {
       type: 'paystack',
@@ -117,7 +120,22 @@ export class WalletProviderService {
   ): Promise<unknown> {
     const providerInstance = this.providerRegistry[provider];
     if (!providerInstance) throw new Error('Unsupported provider');
-    return providerInstance.deposit(apiKey, payload);
+    const { ledger, ...providerPayload } = payload;
+    const providerResponse = await providerInstance.deposit(
+      apiKey,
+      providerPayload,
+    );
+
+    if (!ledger) {
+      return providerResponse;
+    }
+
+    const ledgerResponse = await this.ledgerService.executeTransaction(ledger);
+
+    return {
+      provider: providerResponse,
+      ledger: ledgerResponse,
+    };
   }
 
   async withdraw(
@@ -127,6 +145,21 @@ export class WalletProviderService {
   ): Promise<unknown> {
     const providerInstance = this.providerRegistry[provider];
     if (!providerInstance) throw new Error('Unsupported provider');
-    return providerInstance.withdraw(apiKey, payload);
+    const { ledger, ...providerPayload } = payload;
+    const providerResponse = await providerInstance.withdraw(
+      apiKey,
+      providerPayload,
+    );
+
+    if (!ledger) {
+      return providerResponse;
+    }
+
+    const ledgerResponse = await this.ledgerService.executeTransaction(ledger);
+
+    return {
+      provider: providerResponse,
+      ledger: ledgerResponse,
+    };
   }
 }
