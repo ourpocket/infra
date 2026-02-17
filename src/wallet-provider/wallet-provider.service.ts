@@ -1,15 +1,18 @@
 import { Injectable } from '@nestjs/common';
 
-import { PaystackProvider } from './providers/paystack.provider';
-import { FlutterwaveProvider } from './providers/flutterwave.provider';
-import { PagaProvider } from './providers/paga.provider';
-import { FingraProvider } from './providers/fingra.provider';
 import {
   ProviderType,
   ProviderConfig,
   WalletProvider,
 } from '../interface/wallet-provider.interface';
-import { IWalletProvider } from '../interface/wallet-provider-base.interface';
+import {
+  IWalletProvider,
+  WalletOperationPayload,
+} from '../interface/wallet-provider-base.interface';
+import { PaystackService } from '../services/web2/paystack.service';
+import { FlutterwaveService } from '../services/web2/flutterwave.service';
+import { PagaService } from '../services/web2/paga.service';
+import { FingraService } from '../services/web2/fingra.service';
 
 @Injectable()
 export class WalletProviderService {
@@ -71,19 +74,59 @@ export class WalletProviderService {
   }
 
   private providerRegistry: Record<ProviderType, IWalletProvider> = {
-    paystack: new PaystackProvider(),
-    flutterwave: new FlutterwaveProvider(),
-    paga: new PagaProvider(),
-    fingra: new FingraProvider(),
+    paystack: new PaystackService(),
+    flutterwave: new FlutterwaveService(),
+    paga: new PagaService(),
+    fingra: new FingraService(),
   };
 
   async createWallet(
     provider: ProviderType,
     apiKey: string,
-    payload: any,
-  ): Promise<any> {
+    payload: WalletOperationPayload,
+  ): Promise<unknown> {
     const providerInstance = this.providerRegistry[provider];
     if (!providerInstance) throw new Error('Unsupported provider');
     return providerInstance.createWallet(apiKey, payload);
+  }
+
+  async fetchWallet(
+    provider: ProviderType,
+    apiKey: string,
+    payload: WalletOperationPayload,
+  ): Promise<unknown> {
+    const providerInstance = this.providerRegistry[provider];
+    if (!providerInstance) throw new Error('Unsupported provider');
+    return providerInstance.fetchWallet(apiKey, payload);
+  }
+
+  async listWallets(
+    provider: ProviderType,
+    apiKey: string,
+    payload: WalletOperationPayload,
+  ): Promise<unknown> {
+    const providerInstance = this.providerRegistry[provider];
+    if (!providerInstance) throw new Error('Unsupported provider');
+    return providerInstance.listWallets(apiKey, payload);
+  }
+
+  async deposit(
+    provider: ProviderType,
+    apiKey: string,
+    payload: WalletOperationPayload,
+  ): Promise<unknown> {
+    const providerInstance = this.providerRegistry[provider];
+    if (!providerInstance) throw new Error('Unsupported provider');
+    return providerInstance.deposit(apiKey, payload);
+  }
+
+  async withdraw(
+    provider: ProviderType,
+    apiKey: string,
+    payload: WalletOperationPayload,
+  ): Promise<unknown> {
+    const providerInstance = this.providerRegistry[provider];
+    if (!providerInstance) throw new Error('Unsupported provider');
+    return providerInstance.withdraw(apiKey, payload);
   }
 }

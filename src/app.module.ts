@@ -16,6 +16,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { MailController } from './mail/mail.controller';
 import { MailService } from './mail/mail.service';
 import { MailModule } from './mail/mail.module';
+import { UserProviderModule } from './user-provider/user-provider.module';
 
 const TypeORMConfigModule = TypeOrmModule.forRootAsync({
   imports: [NestConfigModule],
@@ -29,6 +30,7 @@ const TypeORMConfigModule = TypeOrmModule.forRootAsync({
     AuthModule,
     UserModule,
     ApiKeyModule,
+    UserProviderModule,
     ThrottlerModule.forRoot({
       throttlers: [
         {
