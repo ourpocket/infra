@@ -10,6 +10,7 @@ import { ApiKey, ApiKeyScope } from '../entities/api-key.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from '../entities/user.entity';
 import { CreateApiKeyDto } from './dto/create-api-key.dto';
+import { API_KEY_PREFIX } from '../constant';
 
 export interface ApiKeyResponse {
   id: string;
@@ -33,7 +34,7 @@ export class ApiKeyService {
     userId: string,
     createApiKeyDto: CreateApiKeyDto,
   ): Promise<ApiKeyResponse> {
-    const { scope, description, expiresAt } = createApiKeyDto;
+    const { scope, description, expiresAt, quota } = createApiKeyDto;
 
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
@@ -57,6 +58,7 @@ export class ApiKeyService {
       scope,
       description,
       expiresAt,
+      quota: quota ?? 1000,
       user,
     });
 
@@ -64,7 +66,7 @@ export class ApiKeyService {
 
     return {
       id: savedApiKey.id,
-      rawKey: `qp_${rawKey}`,
+      rawKey: `${API_KEY_PREFIX}${rawKey}`,
       scope: savedApiKey.scope,
       description: savedApiKey.description,
       expiresAt: savedApiKey.expiresAt,

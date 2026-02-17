@@ -4,6 +4,9 @@ export const MESSAGES = {
     LOGIN_SUCCESSFUL: 'User successfully logged in',
     EMAIL_VERIFIED: 'Email successfully verified',
     PASSWORD_RESET: 'Password successfully reset',
+    KEY_GENERATED: 'API Key generated successfully',
+    KEY_VERIFIED: 'API Key verified successfully',
+    KEY_REVOKED: 'API Key revoked successfully',
   },
   ERROR: {
     INVALID_CREDENTIALS: 'Invalid credentials',
@@ -15,5 +18,10 @@ export const MESSAGES = {
     TERMS_NOT_ACCEPTED: 'You must accept the Terms to register',
     PASSWORD_REQUIRED: 'Password is required',
     EMAIL_ALREADY_IN_USE: 'Email already in use',
+  },
+
+  AUTHENTICATION: {
+    NOT_AUTHORIZED: 'You are not authorized to perform this action',
+    NO_USER: 'User not found',
   },
 };

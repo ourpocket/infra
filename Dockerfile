@@ -1,26 +1,47 @@
-FROM node:20-alpine AS development
+# -----------------------
+# Base stage
+# -----------------------
+FROM node:20-alpine AS base
 
+# Set working directory
 WORKDIR /usr/src/app
 
+# Install pnpm globally
+RUN npm install -g pnpm
+
+# Copy package files for caching
 COPY package.json pnpm-lock.yaml ./
 
-RUN npm install -g pnpm && pnpm install
+# Install dependencies
+RUN pnpm install
 
+# Copy all source code
 COPY . .
 
-RUN pnpm run build
+# -----------------------
+# Development stage
+# -----------------------
+FROM base AS development
+ENV NODE_ENV=development
 
-FROM node:20-alpine AS production
+# Expose port for NestJS
+EXPOSE 3000
 
+# Start NestJS in watch mode
+CMD ["pnpm", "run", "start:dev"]
+
+# -----------------------
+# Production stage
+# -----------------------
+FROM base AS production
 ARG NODE_ENV=production
 ENV NODE_ENV=${NODE_ENV}
 
-WORKDIR /usr/src/app
+# Build NestJS
+RUN pnpm run build
 
-COPY package.json pnpm-lock.yaml ./
+# Expose port
+EXPOSE 3000
 
-RUN npm install -g pnpm && pnpm install --prod
-
-COPY --from=development /usr/src/app/dist ./dist
-
-CMD ["node", "dist/main"]
+# Start compiled app
+CMD ["node", "dist/main.js"]

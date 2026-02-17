@@ -80,4 +80,20 @@ export class AuthController {
   ): Promise<void> {
     await this.authService.resetPassword(resetPasswordDto);
   }
+
+  @Post('forgotten-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Forgotten password' })
+  @ApiResponse({ status: 200, description: 'Password reset link sent' })
+  forgottenPassword(@Body('email') email: string): Promise<void> {
+    return this.authService.forgottenPassword(email);
+  }
+
+  @Post('request-verify-email')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Request user's email verification" })
+  @ApiResponse({})
+  requestVerificationEmail(@Body('email') email: string): Promise<void> {
+    return this.authService.requestVerificationEmail(email);
+  }
 }

@@ -13,15 +13,14 @@ import {
   ApiBearerAuth,
   ApiResponse,
 } from '@nestjs/swagger';
-import { ApiKeyService } from './api-key.service';
-import { CreateApiKeyDto } from './dto/create-api-key.dto';
+import { ApiKeyService } from 'src/api-key/api-key.service';
+import { CreateApiKeyDto } from 'src/api-key/dto/create-api-key.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { UserStatusGuard } from '../auth/guards/user-status.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 @Controller('api-key')
 @ApiTags('Api Keys 🔑')
-@UseGuards(JwtAuthGuard, UserStatusGuard)
+@UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class ApiKeyController {
   constructor(private readonly apiKeyService: ApiKeyService) {}

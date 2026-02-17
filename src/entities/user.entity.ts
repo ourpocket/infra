@@ -9,6 +9,9 @@ import {
 } from 'typeorm';
 import { ApiKey } from './api-key.entity';
 import { AUTH_TYPE_ENUM } from '../enums';
+import { USERS_STATUS_ENUM } from '../enums';
+
+type UsersStatus = USERS_STATUS_ENUM.ACTIVE | USERS_STATUS_ENUM.BANNED;
 
 @Entity({ name: 'users' })
 export class User {
@@ -34,6 +37,14 @@ export class User {
   @Column({ type: 'varchar', length: 255, nullable: true })
   passwordHash?: string | null;
 
+  @Column({
+    type: 'varchar',
+    length: 20,
+    nullable: true,
+    default: USERS_STATUS_ENUM.ACTIVE,
+  })
+  status?: UsersStatus;
+
   @Column({ type: 'varchar', length: 30, nullable: true })
   role?: string | null;
 
@@ -57,6 +68,9 @@ export class User {
 
   @CreateDateColumn()
   createdAt!: Date;
+
+  @Column({ type: 'boolean', default: false })
+  isDeleted!: boolean;
 
   @UpdateDateColumn()
   updatedAt!: Date;

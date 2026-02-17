@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { WalletProviderModule } from './wallet-provider/wallet-provider.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
@@ -12,6 +13,10 @@ import {
 import { ApiKeyModule } from './api-key/api-key.module';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
+import { MailController } from './mail/mail.controller';
+import { MailService } from './mail/mail.service';
+import { MailModule } from './mail/mail.module';
+import { UserProviderModule } from './user-provider/user-provider.module';
 
 const TypeORMConfigModule = TypeOrmModule.forRootAsync({
   imports: [NestConfigModule],
@@ -21,12 +26,11 @@ const TypeORMConfigModule = TypeOrmModule.forRootAsync({
 
 @Module({
   imports: [
-    NestConfigModule.forRoot(),
-    TypeORMConfigModule,
-    ConfigModule,
+    WalletProviderModule,
     AuthModule,
     UserModule,
     ApiKeyModule,
+    UserProviderModule,
     ThrottlerModule.forRoot({
       throttlers: [
         {
@@ -36,8 +40,11 @@ const TypeORMConfigModule = TypeOrmModule.forRootAsync({
       ],
     }),
     ScheduleModule.forRoot(),
+    MailModule,
+    TypeORMConfigModule,
+    ConfigModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
+  controllers: [AppController, MailController],
+  providers: [AppService, MailService],
 })
 export class AppModule {}
