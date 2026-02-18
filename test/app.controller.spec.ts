@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
+import { AppController } from '../src/app.controller';
+import { AppService } from '../src/app.service';
 
 describe('AppController', () => {
   let appController: AppController;
@@ -15,8 +15,10 @@ describe('AppController', () => {
   });
 
   describe('root', () => {
-    it('should return "Hello World!"', () => {
-      expect(appController.getStat()).toBe('Hello World!');
+    it('should return status', () => {
+      const result = appController.getStat();
+      expect(result).toHaveProperty('message');
+      expect(result.message).toBe('Our Pocket Api is return well');
     });
   });
 });
