@@ -33,7 +33,7 @@ export class ApiKeyRepository extends Repository<ApiKey> {
 
   async findAllByUserId(userId: string): Promise<ApiKey[]> {
     return this.createQueryBuilder('apiKey')
-      .innerJoin('apiKey.user', 'user')
+      .innerJoinAndSelect('apiKey.user', 'user')
       .where('user.id = :userId', { userId })
       .orderBy('apiKey.createdAt', 'DESC')
       .getMany();
