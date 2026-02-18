@@ -81,9 +81,7 @@ export class ApiKeyService {
       ? incomingKey.slice(3)
       : incomingKey;
 
-    const allApiKeys = await this.apiKeyRepository.find({
-      relations: ['user'],
-    });
+    const allApiKeys = await this.apiKeyRepository.findAllWithUsers();
 
     const matchedKey = allApiKeys.find((apiKey) =>
       verifyApiKey(rawKey, apiKey.hashedKey),
@@ -117,10 +115,7 @@ export class ApiKeyService {
   }
 
   async getUserApiKeys(userId: string): Promise<Omit<ApiKey, 'hashedKey'>[]> {
-    const apiKeys = await this.apiKeyRepository.find({
-      where: { user: { id: userId } },
-      order: { createdAt: 'DESC' },
-    });
+    const apiKeys = await this.apiKeyRepository.findAllByUserId(userId);
 
     return apiKeys.map(({ hashedKey, ...rest }) => rest);
   }
@@ -129,10 +124,7 @@ export class ApiKeyService {
     apiKeyId: string,
     userId: string,
   ): Promise<Omit<ApiKey, 'hashedKey'>> {
-    const apiKey = await this.apiKeyRepository.findOne({
-      where: { id: apiKeyId },
-      relations: ['user'],
-    });
+    const apiKey = await this.apiKeyRepository.findByIdWithUser(apiKeyId);
 
     if (!apiKey) {
       throw new NotFoundException('API key not found');
