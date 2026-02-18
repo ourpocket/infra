@@ -12,8 +12,6 @@ export const generateApiKey = (size: TSize = 32): ApiKeyResult => {
 
   const hashedKey = crypto.createHash('sha256').update(rawKey).digest('hex');
 
-  console.log(`qp_${rawKey}`);
-
   return { rawKey, hashedKey };
 };
 

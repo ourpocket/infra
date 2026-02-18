@@ -19,7 +19,10 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "docker:dev": "docker compose up --build",
+    "docker:dev:no-cache": "docker compose down && docker compose build --no-cache && docker compose up --force-recreate",
+    "docker:dev:down": "docker compose down"
   },
   "dependencies": {
     "@nestjs/cache-manager": "^3.0.1",
@@ -33,6 +36,7 @@
     "@nestjs/swagger": "^11.2.0",
     "@nestjs/throttler": "^6.4.0",
     "@nestjs/typeorm": "^11.0.0",
+    "axios": "^1.13.2",
     "bcrypt": "^6.0.0",
     "bullmq": "^5.56.5",
     "cache-manager": "^7.2.5",

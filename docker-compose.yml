@@ -19,6 +19,7 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - JWT_EXPIRES_IN=1d
       - RESEND_API_KEY=${RESEND_API_KEY}
+      - LEDGER_URL=${LEDGER_URL:-http://host.docker.internal:4000}
     depends_on:
       - postgres
       - redis
