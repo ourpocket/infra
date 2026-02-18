@@ -3,38 +3,32 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { PlatformAccount } from '../entities/platform-account.entity';
 import { Project } from '../entities/project.entity';
-import { User } from '../entities/user.entity';
 import { CreatePlatformAccountDto } from './dto/create-platform-account.dto';
+import { PlatformAccountRepository } from './platform-account.repository';
+import { ProjectRepository } from '../project/project.repository';
+import { UserRepository } from '../user/user.repository';
 
 @Injectable()
 export class PlatformAccountService {
   constructor(
-    @InjectRepository(PlatformAccount)
-    private readonly platformAccountRepository: Repository<PlatformAccount>,
-    @InjectRepository(Project)
-    private readonly projectRepository: Repository<Project>,
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
+    private readonly platformAccountRepository: PlatformAccountRepository,
+    private readonly projectRepository: ProjectRepository,
+    private readonly userRepository: UserRepository,
   ) {}
 
   async createPlatformAccount(
     userId: string,
     dto: CreatePlatformAccountDto,
   ): Promise<PlatformAccount> {
-    const existing = await this.platformAccountRepository.findOne({
-      where: { user: { id: userId } },
-      relations: ['user'],
-    });
+    const existing = await this.platformAccountRepository.findByUserId(userId);
 
     if (existing) {
       throw new ConflictException('Platform account already exists for user');
     }
 
-    const user = await this.userRepository.findOne({ where: { id: userId } });
+    const user = await this.userRepository.findById(userId);
     if (!user) {
       throw new NotFoundException('User not found');
     }
@@ -50,10 +44,8 @@ export class PlatformAccountService {
   }
 
   async getPlatformAccountForUser(userId: string): Promise<PlatformAccount> {
-    const platformAccount = await this.platformAccountRepository.findOne({
-      where: { user: { id: userId } },
-      relations: ['user'],
-    });
+    const platformAccount =
+      await this.platformAccountRepository.findByUserId(userId);
 
     if (!platformAccount) {
       throw new NotFoundException('Platform account not found');
@@ -63,18 +55,16 @@ export class PlatformAccountService {
   }
 
   async listProjectsForUser(userId: string): Promise<Project[]> {
-    const platformAccount = await this.platformAccountRepository.findOne({
-      where: { user: { id: userId } },
-    });
+    const platformAccount =
+      await this.platformAccountRepository.findByUserId(userId);
 
     if (!platformAccount) {
       throw new NotFoundException('Platform account not found');
     }
 
-    const projects = await this.projectRepository.find({
-      where: { platformAccount: { id: platformAccount.id } },
-      order: { createdAt: 'DESC' },
-    });
+    const projects = await this.projectRepository.findAllByPlatformAccountId(
+      platformAccount.id,
+    );
 
     return projects;
   }

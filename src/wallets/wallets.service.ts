@@ -3,8 +3,6 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { Wallet } from '../entities/wallet.entity';
 import { ProjectAccount } from '../entities/project-account.entity';
 import { ProjectApiKeyService } from '../project/project-api-key.service';
@@ -16,14 +14,14 @@ import { CreateWalletRequestDto } from './dto/create-wallet.dto';
 import { WalletProviderService } from '../wallet-provider/wallet-provider.service';
 import { ProviderType } from '../interface/wallet-provider.interface';
 import { ProjectProviderService } from '../project/project-provider.service';
+import { WalletRepository } from './wallet.repository';
+import { ProjectAccountRepository } from './project-account.repository';
 
 @Injectable()
 export class WalletsService {
   constructor(
-    @InjectRepository(Wallet)
-    private readonly walletRepository: Repository<Wallet>,
-    @InjectRepository(ProjectAccount)
-    private readonly projectAccountRepository: Repository<ProjectAccount>,
+    private readonly walletRepository: WalletRepository,
+    private readonly projectAccountRepository: ProjectAccountRepository,
     private readonly projectApiKeyService: ProjectApiKeyService,
     private readonly projectProviderService: ProjectProviderService,
     private readonly walletProviderService: WalletProviderService,
@@ -40,12 +38,10 @@ export class WalletsService {
     let account: ProjectAccount | null = null;
     if (dto.accountId) {
       account =
-        (await this.projectAccountRepository.findOne({
-          where: {
-            id: dto.accountId,
-            project: { id: projectApiKey.project.id },
-          },
-        })) ?? null;
+        (await this.projectAccountRepository.findByIdAndProjectId(
+          dto.accountId,
+          projectApiKey.project.id,
+        )) ?? null;
 
       if (!account) {
         throw new NotFoundException('Project account not found');
@@ -64,10 +60,10 @@ export class WalletsService {
   async getWallet(incomingApiKey: string, walletId: string): Promise<unknown> {
     const projectApiKey =
       await this.projectApiKeyService.verifyProjectApiKey(incomingApiKey);
-    const wallet = await this.walletRepository.findOne({
-      where: { id: walletId, project: { id: projectApiKey.project.id } },
-      relations: ['project', 'account'],
-    });
+    const wallet = await this.walletRepository.findByIdAndProjectId(
+      walletId,
+      projectApiKey.project.id,
+    );
 
     if (!wallet) {
       throw new NotFoundException('Wallet not found');
@@ -92,12 +88,16 @@ export class WalletsService {
       await this.projectApiKeyService.verifyProjectApiKey(incomingApiKey);
     const projectId = projectApiKey.project.id;
 
-    const fromWallet = await this.walletRepository.findOne({
-      where: { id: dto.fromWalletId, project: { id: projectId } },
-    });
-    const toWallet = await this.walletRepository.findOne({
-      where: { id: dto.toWalletId, project: { id: projectId } },
-    });
+    const fromWallet =
+      await this.walletRepository.findByIdAndProjectIdWithoutRelations(
+        dto.fromWalletId,
+        projectId,
+      );
+    const toWallet =
+      await this.walletRepository.findByIdAndProjectIdWithoutRelations(
+        dto.toWalletId,
+        projectId,
+      );
 
     if (!fromWallet || !toWallet) {
       throw new NotFoundException('Wallet not found');
@@ -138,9 +138,11 @@ export class WalletsService {
       await this.projectApiKeyService.verifyProjectApiKey(incomingApiKey);
     const projectId = projectApiKey.project.id;
 
-    const wallet = await this.walletRepository.findOne({
-      where: { id: dto.walletId, project: { id: projectId } },
-    });
+    const wallet =
+      await this.walletRepository.findByIdAndProjectIdWithoutRelations(
+        dto.walletId,
+        projectId,
+      );
 
     if (!wallet) {
       throw new NotFoundException('Wallet not found');
@@ -202,9 +204,11 @@ export class WalletsService {
       await this.projectApiKeyService.verifyProjectApiKey(incomingApiKey);
     const projectId = projectApiKey.project.id;
 
-    const wallet = await this.walletRepository.findOne({
-      where: { id: dto.walletId, project: { id: projectId } },
-    });
+    const wallet =
+      await this.walletRepository.findByIdAndProjectIdWithoutRelations(
+        dto.walletId,
+        projectId,
+      );
 
     if (!wallet) {
       throw new NotFoundException('Wallet not found');
