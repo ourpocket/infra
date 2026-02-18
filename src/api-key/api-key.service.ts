@@ -11,6 +11,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { User } from '../entities/user.entity';
 import { CreateApiKeyDto } from './dto/create-api-key.dto';
 import { API_KEY_PREFIX } from '../constant';
+import { ApiKeyRepository } from './api-key.repository';
 
 export interface ApiKeyResponse {
   id: string;
@@ -25,7 +26,7 @@ export interface ApiKeyResponse {
 export class ApiKeyService {
   constructor(
     @InjectRepository(ApiKey)
-    private readonly apiKeyRepository: Repository<ApiKey>,
+    private readonly apiKeyRepository: ApiKeyRepository,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
   ) {}
@@ -41,9 +42,10 @@ export class ApiKeyService {
       throw new NotFoundException('User not found');
     }
 
-    const existingKey = await this.apiKeyRepository.findOne({
-      where: { user: { id: userId }, scope },
-    });
+    const existingKey = await this.apiKeyRepository.findByUserIdAndScope(
+      userId,
+      scope,
+    );
 
     if (existingKey) {
       throw new ConflictException(
@@ -99,10 +101,7 @@ export class ApiKeyService {
   }
 
   async revokeApiKey(apiKeyId: string, userId: string): Promise<void> {
-    const apiKey = await this.apiKeyRepository.findOne({
-      where: { id: apiKeyId },
-      relations: ['user'],
-    });
+    const apiKey = await this.apiKeyRepository.findByIdWithUser(apiKeyId);
 
     if (!apiKey) {
       throw new NotFoundException('API key not found');

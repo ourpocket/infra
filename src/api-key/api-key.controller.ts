@@ -18,6 +18,7 @@ import { CreateApiKeyDto } from './dto/create-api-key.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { UserStatusGuard } from '../auth/guards/user-status.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { STATUS_CODE } from '@/constant';
 
 @Controller('api-key')
 @ApiTags('Api Keys 🔑')
@@ -33,11 +34,11 @@ export class ApiKeyController {
       'Creates a new API key for the authenticated user. The raw key is only returned once.',
   })
   @ApiResponse({
-    status: 201,
+    status: STATUS_CODE.SUCCESS.CREATED,
     description: 'API key created successfully',
   })
   @ApiResponse({
-    status: 409,
+    status: STATUS_CODE.ERROR.CONFLICT,
     description: 'API key with this scope already exists',
   })
   async createApiKey(
@@ -53,7 +54,7 @@ export class ApiKeyController {
     description: 'Retrieves all API keys for the authenticated user',
   })
   @ApiResponse({
-    status: 200,
+    status: STATUS_CODE.SUCCESS.OK,
     description: 'List of API keys retrieved successfully',
   })
   async getUserApiKeys(@CurrentUser('userId') userId: string) {
@@ -66,11 +67,11 @@ export class ApiKeyController {
     description: 'Retrieves a specific API key by its ID',
   })
   @ApiResponse({
-    status: 200,
+    status: STATUS_CODE.SUCCESS.OK,
     description: 'API key retrieved successfully',
   })
   @ApiResponse({
-    status: 404,
+    status: STATUS_CODE.ERROR.NOT_FOUND,
     description: 'API key not found',
   })
   async getApiKeyById(
@@ -86,11 +87,11 @@ export class ApiKeyController {
     description: 'Revokes (deletes) an API key',
   })
   @ApiResponse({
-    status: 200,
+    status: STATUS_CODE.SUCCESS.OK,
     description: 'API key revoked successfully',
   })
   @ApiResponse({
-    status: 404,
+    status: STATUS_CODE.ERROR.NOT_FOUND,
     description: 'API key not found',
   })
   async revokeApiKey(
