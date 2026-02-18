@@ -7,6 +7,8 @@ import { WalletsService } from './wallets.service';
 import { ProjectModule } from '../project/project.module';
 import { LedgerModule } from '../ledger/ledger.module';
 import { WalletProviderModule } from '../wallet-provider/wallet-provider.module';
+import { WalletRepository } from './wallet.repository';
+import { ProjectAccountRepository } from './project-account.repository';
 
 @Module({
   imports: [
@@ -16,6 +18,7 @@ import { WalletProviderModule } from '../wallet-provider/wallet-provider.module'
     WalletProviderModule,
   ],
   controllers: [WalletsController],
-  providers: [WalletsService],
+  providers: [WalletsService, WalletRepository, ProjectAccountRepository],
+  exports: [WalletsService, WalletRepository, ProjectAccountRepository],
 })
 export class WalletsModule {}

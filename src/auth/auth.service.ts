@@ -20,13 +20,14 @@ import { addMinutes } from 'date-fns';
 import { FRONTEND_URL, MESSAGES } from '../constant';
 import { MailService } from 'src/mail/mail.service';
 
+import { UserRepository } from 'src/user/user.repository';
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
   constructor(
-    @InjectRepository(User)
-    private readonly userRepo: Repository<User>,
+    private readonly userRepository: UserRepository,
     private readonly jwtService: JwtService,
     private readonly mailService: MailService,
   ) {}
@@ -56,9 +57,7 @@ export class AuthService {
       throw new BadRequestException(MESSAGES.ERROR.PASSWORD_REQUIRED);
     }
 
-    const existing = await this.userRepo.findOne({
-      where: { email: email.toLowerCase() },
-    });
+    const existing = await this.userRepository.findByEmail(email.toLowerCase());
     if (existing) {
       throw new BadRequestException(MESSAGES.ERROR.EMAIL_ALREADY_IN_USE);
     }
@@ -66,7 +65,7 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(password, 12);
     await this.mailService.sendWelcomeEmail(email, name);
 
-    const user = this.userRepo.create({
+    const user = this.userRepository.create({
       name,
       email: email.toLowerCase(),
       photoUrl: photoUrl ?? null,
@@ -77,7 +76,7 @@ export class AuthService {
       acceptTerms: !!dto.acceptTerms,
       isEmailVerified: false,
     });
-    const saved = await this.userRepo.save(user);
+    const saved = await this.userRepository.save(user);
     const { passwordHash: _, ...safe } = saved;
     return safe as Omit<User, 'passwordHash'>;
   }
@@ -88,10 +87,10 @@ export class AuthService {
   ): Promise<Omit<User, 'passwordHash'>> {
     const { email, name, photoUrl, companyName, role } = dto;
     const lowerEmail = email.toLowerCase();
-    let user = await this.userRepo.findOne({ where: { email: lowerEmail } });
+    let user = await this.userRepository.findByEmail(lowerEmail);
 
     if (!user) {
-      user = this.userRepo.create({
+      user = this.userRepository.create({
         name,
         email: lowerEmail,
         photoUrl: photoUrl ?? null,
@@ -111,7 +110,7 @@ export class AuthService {
       user.acceptTerms = !!dto.acceptTerms;
     }
 
-    const saved = await this.userRepo.save(user);
+    const saved = await this.userRepository.save(user);
     const { passwordHash: _, ...safe } = saved;
     return safe as Omit<User, 'passwordHash'>;
   }
@@ -119,11 +118,7 @@ export class AuthService {
   async login(signInDto: SignInDto) {
     const { email, password } = signInDto;
 
-    const user = await this.userRepo.findOne({
-      where: {
-        email: email.toLowerCase(),
-      },
-    });
+    const user = await this.userRepository.findByEmail(email.toLowerCase());
 
     if (!user) {
       throw new UnauthorizedException(MESSAGES.ERROR.INVALID_CREDENTIALS);
@@ -166,7 +161,7 @@ export class AuthService {
   }
 
   async forgottenPassword(email: string): Promise<void> {
-    const user = await this.userRepo.findOne({ where: { email } });
+    const user = await this.userRepository.findByEmail(email);
 
     if (!user) {
       return;
@@ -179,7 +174,7 @@ export class AuthService {
     user.passwordResetToken = token;
     user.passwordResetExpires = expiresAt;
 
-    await this.userRepo.save(user);
+    await this.userRepository.save(user);
 
     const resetPasswordLink = `${FRONTEND_URL}/reset-password?token=${rawToken}`;
 
@@ -192,7 +187,7 @@ export class AuthService {
     const { email, token } = verifyEmailDto;
     const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
 
-    const user = await this.userRepo.findOne({
+    const user = await this.userRepository.findOne({
       where: {
         email: email.toLowerCase(),
         emailVerificationToken: hashedToken,
@@ -214,14 +209,14 @@ export class AuthService {
     user.emailVerificationToken = null;
     user.emailVerificationExpires = null;
 
-    await this.userRepo.save(user);
+    await this.userRepository.save(user);
   }
 
   async resetPassword(resetPasswordDto: ResetPasswordDto): Promise<void> {
     const { email, token, newPassword } = resetPasswordDto;
     const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
 
-    const user = await this.userRepo.findOne({
+    const user = await this.userRepository.findOne({
       where: {
         email: email.toLowerCase(),
         passwordResetToken: hashedToken,
@@ -240,11 +235,11 @@ export class AuthService {
     user.passwordResetToken = null;
     user.passwordResetExpires = null;
 
-    await this.userRepo.save(user);
+    await this.userRepository.save(user);
   }
 
   async requestVerificationEmail(email: string): Promise<void> {
-    const user = await this.userRepo.findOne({ where: { email } });
+    const user = await this.userRepository.findByEmail(email);
 
     if (!user) {
       throw new BadRequestException(MESSAGES.AUTHENTICATION.NO_USER);
@@ -255,7 +250,7 @@ export class AuthService {
     const expiresAt = addMinutes(new Date(), 10);
     user.emailVerificationToken = token;
     user.emailVerificationExpires = expiresAt;
-    await this.userRepo.save(user);
+    await this.userRepository.save(user);
     await this.mailService.sendVerificationEmail(user.email, rawToken);
   }
 }
