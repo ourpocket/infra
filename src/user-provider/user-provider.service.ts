@@ -3,32 +3,28 @@ import {
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { UserProvider } from '../entities/user-provider.entity';
 import { PROVIDER_TYPE_ENUM } from '../enums';
 import { CreateUserProviderDto } from './dto/create-user-provider.dto';
 import { UpdateUserProviderDto } from './dto/update-user-provider.dto';
 import { UserProviderResponseDto } from './dto/user-provider-response.dto';
+import { UserProviderRepository } from './user-provider.repository';
 
 @Injectable()
 export class UserProviderService {
   constructor(
-    @InjectRepository(UserProvider)
-    private userProviderRepository: Repository<UserProvider>,
+    private readonly userProviderRepository: UserProviderRepository,
   ) {}
 
   async create(
     userId: string,
     createUserProviderDto: CreateUserProviderDto,
   ): Promise<UserProviderResponseDto> {
-    const existingProvider = await this.userProviderRepository.findOne({
-      where: {
+    const existingProvider =
+      await this.userProviderRepository.findByUserIdAndType(
         userId,
-        type: createUserProviderDto.type,
-        isDeleted: false,
-      },
-    });
+        createUserProviderDto.type,
+      );
 
     if (existingProvider) {
       throw new ConflictException(
@@ -46,27 +42,16 @@ export class UserProviderService {
   }
 
   async findAll(userId: string): Promise<UserProviderResponseDto[]> {
-    const providers = await this.userProviderRepository.find({
-      where: {
-        userId,
-        isDeleted: false,
-      },
-      order: {
-        createdAt: 'DESC',
-      },
-    });
+    const providers = await this.userProviderRepository.findAllByUserId(userId);
 
     return UserProviderResponseDto.fromEntities(providers);
   }
 
   async findOne(userId: string, id: string): Promise<UserProviderResponseDto> {
-    const provider = await this.userProviderRepository.findOne({
-      where: {
-        id,
-        userId,
-        isDeleted: false,
-      },
-    });
+    const provider = await this.userProviderRepository.findByUserIdAndId(
+      userId,
+      id,
+    );
 
     if (!provider) {
       throw new NotFoundException('Provider not found');
@@ -88,13 +73,10 @@ export class UserProviderService {
     userId: string,
     type: PROVIDER_TYPE_ENUM,
   ): Promise<UserProvider> {
-    const provider = await this.userProviderRepository.findOne({
-      where: {
-        userId,
-        type,
-        isDeleted: false,
-      },
-    });
+    const provider = await this.userProviderRepository.findByUserIdAndType(
+      userId,
+      type,
+    );
 
     if (!provider) {
       throw new NotFoundException('Provider not found');
@@ -108,13 +90,10 @@ export class UserProviderService {
     id: string,
     updateUserProviderDto: UpdateUserProviderDto,
   ): Promise<UserProviderResponseDto> {
-    const provider = await this.userProviderRepository.findOne({
-      where: {
-        id,
-        userId,
-        isDeleted: false,
-      },
-    });
+    const provider = await this.userProviderRepository.findByUserIdAndId(
+      userId,
+      id,
+    );
 
     if (!provider) {
       throw new NotFoundException('Provider not found');
@@ -130,13 +109,10 @@ export class UserProviderService {
   }
 
   async remove(userId: string, id: string): Promise<void> {
-    const provider = await this.userProviderRepository.findOne({
-      where: {
-        id,
-        userId,
-        isDeleted: false,
-      },
-    });
+    const provider = await this.userProviderRepository.findByUserIdAndId(
+      userId,
+      id,
+    );
 
     if (!provider) {
       throw new NotFoundException('Provider not found');
@@ -149,13 +125,10 @@ export class UserProviderService {
     userId: string,
     id: string,
   ): Promise<UserProviderResponseDto> {
-    const provider = await this.userProviderRepository.findOne({
-      where: {
-        id,
-        userId,
-        isDeleted: false,
-      },
-    });
+    const provider = await this.userProviderRepository.findByUserIdAndId(
+      userId,
+      id,
+    );
 
     if (!provider) {
       throw new NotFoundException('Provider not found');

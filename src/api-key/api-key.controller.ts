@@ -6,6 +6,7 @@ import {
   Body,
   Param,
   UseGuards,
+  HttpStatus,
 } from '@nestjs/common';
 import {
   ApiOperation,
@@ -33,11 +34,11 @@ export class ApiKeyController {
       'Creates a new API key for the authenticated user. The raw key is only returned once.',
   })
   @ApiResponse({
-    status: 201,
+    status: HttpStatus.CREATED,
     description: 'API key created successfully',
   })
   @ApiResponse({
-    status: 409,
+    status: HttpStatus.CONFLICT,
     description: 'API key with this scope already exists',
   })
   async createApiKey(
@@ -53,7 +54,7 @@ export class ApiKeyController {
     description: 'Retrieves all API keys for the authenticated user',
   })
   @ApiResponse({
-    status: 200,
+    status: HttpStatus.OK,
     description: 'List of API keys retrieved successfully',
   })
   async getUserApiKeys(@CurrentUser('userId') userId: string) {
@@ -66,11 +67,11 @@ export class ApiKeyController {
     description: 'Retrieves a specific API key by its ID',
   })
   @ApiResponse({
-    status: 200,
+    status: HttpStatus.OK,
     description: 'API key retrieved successfully',
   })
   @ApiResponse({
-    status: 404,
+    status: HttpStatus.NOT_FOUND,
     description: 'API key not found',
   })
   async getApiKeyById(
@@ -86,11 +87,11 @@ export class ApiKeyController {
     description: 'Revokes (deletes) an API key',
   })
   @ApiResponse({
-    status: 200,
+    status: HttpStatus.OK,
     description: 'API key revoked successfully',
   })
   @ApiResponse({
-    status: 404,
+    status: HttpStatus.NOT_FOUND,
     description: 'API key not found',
   })
   async revokeApiKey(

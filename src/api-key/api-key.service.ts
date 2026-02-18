@@ -11,6 +11,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { User } from '../entities/user.entity';
 import { CreateApiKeyDto } from './dto/create-api-key.dto';
 import { API_KEY_PREFIX } from '../constant';
+import { ApiKeyRepository } from './api-key.repository';
 
 export interface ApiKeyResponse {
   id: string;
@@ -24,8 +25,7 @@ export interface ApiKeyResponse {
 @Injectable()
 export class ApiKeyService {
   constructor(
-    @InjectRepository(ApiKey)
-    private readonly apiKeyRepository: Repository<ApiKey>,
+    private readonly apiKeyRepository: ApiKeyRepository,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
   ) {}
@@ -41,9 +41,10 @@ export class ApiKeyService {
       throw new NotFoundException('User not found');
     }
 
-    const existingKey = await this.apiKeyRepository.findOne({
-      where: { user: { id: userId }, scope },
-    });
+    const existingKey = await this.apiKeyRepository.findByUserIdAndScope(
+      userId,
+      scope,
+    );
 
     if (existingKey) {
       throw new ConflictException(
@@ -66,7 +67,7 @@ export class ApiKeyService {
 
     return {
       id: savedApiKey.id,
-      rawKey: `${API_KEY_PREFIX}${rawKey}`,
+      rawKey: `${API_KEY_PREFIX}${savedApiKey.id}_${rawKey}`,
       scope: savedApiKey.scope,
       description: savedApiKey.description,
       expiresAt: savedApiKey.expiresAt,
@@ -75,34 +76,38 @@ export class ApiKeyService {
   }
 
   async verifyApiKey(incomingKey: string): Promise<ApiKey> {
-    const rawKey = incomingKey.startsWith('qp_')
-      ? incomingKey.slice(3)
-      : incomingKey;
+    if (!incomingKey.startsWith(API_KEY_PREFIX)) {
+      throw new UnauthorizedException('Invalid API key format');
+    }
 
-    const allApiKeys = await this.apiKeyRepository.find({
-      relations: ['user'],
-    });
+    const keyWithoutPrefix = incomingKey.slice(API_KEY_PREFIX.length);
+    const parts = keyWithoutPrefix.split('_');
 
-    const matchedKey = allApiKeys.find((apiKey) =>
-      verifyApiKey(rawKey, apiKey.hashedKey),
-    );
+    if (parts.length !== 2) {
+      throw new UnauthorizedException('Invalid API key format');
+    }
 
-    if (!matchedKey) {
+    const [apiKeyId, rawSecret] = parts;
+
+    const apiKey = await this.apiKeyRepository.findByIdWithUser(apiKeyId);
+
+    if (!apiKey) {
       throw new UnauthorizedException('Invalid API key');
     }
 
-    if (matchedKey.expiresAt && new Date() > matchedKey.expiresAt) {
+    if (!verifyApiKey(rawSecret, apiKey.hashedKey)) {
+      throw new UnauthorizedException('Invalid API key');
+    }
+
+    if (apiKey.expiresAt && new Date() > apiKey.expiresAt) {
       throw new UnauthorizedException('API key has expired');
     }
 
-    return matchedKey;
+    return apiKey;
   }
 
   async revokeApiKey(apiKeyId: string, userId: string): Promise<void> {
-    const apiKey = await this.apiKeyRepository.findOne({
-      where: { id: apiKeyId },
-      relations: ['user'],
-    });
+    const apiKey = await this.apiKeyRepository.findByIdWithUser(apiKeyId);
 
     if (!apiKey) {
       throw new NotFoundException('API key not found');
@@ -118,10 +123,7 @@ export class ApiKeyService {
   }
 
   async getUserApiKeys(userId: string): Promise<Omit<ApiKey, 'hashedKey'>[]> {
-    const apiKeys = await this.apiKeyRepository.find({
-      where: { user: { id: userId } },
-      order: { createdAt: 'DESC' },
-    });
+    const apiKeys = await this.apiKeyRepository.findAllByUserId(userId);
 
     return apiKeys.map(({ hashedKey, ...rest }) => rest);
   }
@@ -130,10 +132,7 @@ export class ApiKeyService {
     apiKeyId: string,
     userId: string,
   ): Promise<Omit<ApiKey, 'hashedKey'>> {
-    const apiKey = await this.apiKeyRepository.findOne({
-      where: { id: apiKeyId },
-      relations: ['user'],
-    });
+    const apiKey = await this.apiKeyRepository.findByIdWithUser(apiKeyId);
 
     if (!apiKey) {
       throw new NotFoundException('API key not found');

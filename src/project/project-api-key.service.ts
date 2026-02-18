@@ -4,16 +4,17 @@ import {
   ConflictException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import * as crypto from 'crypto';
 import {
   ProjectApiKey,
   ProjectApiKeyScope,
 } from '../entities/project-api-key.entity';
 import { Project } from '../entities/project.entity';
-import { generateApiKey, verifyApiKey } from '../helpers';
+import { generateApiKey } from '../helpers';
 import { API_KEY_PREFIX } from '../constant';
 import { CreateProjectApiKeyDto } from './dto/create-project-api-key.dto';
+import { ProjectApiKeyRepository } from './project-api-key.repository';
+import { ProjectRepository } from './project.repository';
 
 export interface ProjectApiKeyResponse {
   id: string;
@@ -27,10 +28,8 @@ export interface ProjectApiKeyResponse {
 @Injectable()
 export class ProjectApiKeyService {
   constructor(
-    @InjectRepository(ProjectApiKey)
-    private readonly projectApiKeyRepository: Repository<ProjectApiKey>,
-    @InjectRepository(Project)
-    private readonly projectRepository: Repository<Project>,
+    private readonly projectApiKeyRepository: ProjectApiKeyRepository,
+    private readonly projectRepository: ProjectRepository,
   ) {}
 
   async createProjectApiKey(
@@ -38,21 +37,20 @@ export class ProjectApiKeyService {
     projectId: string,
     dto: CreateProjectApiKeyDto,
   ): Promise<ProjectApiKeyResponse> {
-    const project = await this.projectRepository.findOne({
-      where: { id: projectId, platformAccount: { user: { id: userId } } },
-      relations: ['platformAccount'],
-    });
+    const project = await this.projectRepository.findByIdAndUserId(
+      projectId,
+      userId,
+    );
 
     if (!project) {
       throw new NotFoundException('Project not found');
     }
 
-    const existingKey = await this.projectApiKeyRepository.findOne({
-      where: {
-        project: { id: project.id },
-        scope: dto.scope as ProjectApiKeyScope,
-      },
-    });
+    const existingKey =
+      await this.projectApiKeyRepository.findByProjectIdAndScope(
+        project.id,
+        dto.scope,
+      );
 
     if (existingKey) {
       throw new ConflictException(
@@ -89,13 +87,10 @@ export class ProjectApiKeyService {
       ? incomingKey.slice(prefix.length)
       : incomingKey;
 
-    const allApiKeys = await this.projectApiKeyRepository.find({
-      relations: ['project'],
-    });
+    const hashedKey = crypto.createHash('sha256').update(rawKey).digest('hex');
 
-    const matchedKey = allApiKeys.find((apiKey) =>
-      verifyApiKey(rawKey, apiKey.hashedKey),
-    );
+    const matchedKey =
+      await this.projectApiKeyRepository.findByHashedKey(hashedKey);
 
     if (!matchedKey) {
       throw new UnauthorizedException('Invalid project API key');
@@ -113,13 +108,12 @@ export class ProjectApiKeyService {
     projectId: string,
     apiKeyId: string,
   ): Promise<void> {
-    const apiKey = await this.projectApiKeyRepository.findOne({
-      where: {
-        id: apiKeyId,
-        project: { id: projectId, platformAccount: { user: { id: userId } } },
-      },
-      relations: ['project', 'project.platformAccount'],
-    });
+    const apiKey =
+      await this.projectApiKeyRepository.findByIdAndProjectIdAndUserId(
+        apiKeyId,
+        projectId,
+        userId,
+      );
 
     if (!apiKey) {
       throw new NotFoundException('Project API key not found');
@@ -132,19 +126,18 @@ export class ProjectApiKeyService {
     userId: string,
     projectId: string,
   ): Promise<Omit<ProjectApiKey, 'hashedKey'>[]> {
-    const project = await this.projectRepository.findOne({
-      where: { id: projectId, platformAccount: { user: { id: userId } } },
-      relations: ['platformAccount'],
-    });
+    const project = await this.projectRepository.findByIdAndUserId(
+      projectId,
+      userId,
+    );
 
     if (!project) {
       throw new NotFoundException('Project not found');
     }
 
-    const apiKeys = await this.projectApiKeyRepository.find({
-      where: { project: { id: project.id } },
-      order: { createdAt: 'DESC' },
-    });
+    const apiKeys = await this.projectApiKeyRepository.findAllByProjectId(
+      project.id,
+    );
 
     return apiKeys.map(({ hashedKey, ...rest }) => rest);
   }

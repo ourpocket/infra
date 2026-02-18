@@ -3,20 +3,18 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { ProjectProvider } from '../entities/project-provider.entity';
 import { Project } from '../entities/project.entity';
 import { PROVIDER_TYPE_ENUM } from '../enums';
 import { ConfigureProjectProviderDto } from './dto/configure-project-provider.dto';
+import { ProjectProviderRepository } from './project-provider.repository';
+import { ProjectRepository } from './project.repository';
 
 @Injectable()
 export class ProjectProviderService {
   constructor(
-    @InjectRepository(ProjectProvider)
-    private readonly projectProviderRepository: Repository<ProjectProvider>,
-    @InjectRepository(Project)
-    private readonly projectRepository: Repository<Project>,
+    private readonly projectProviderRepository: ProjectProviderRepository,
+    private readonly projectRepository: ProjectRepository,
   ) {}
 
   async configureProvider(
@@ -24,22 +22,20 @@ export class ProjectProviderService {
     projectId: string,
     dto: ConfigureProjectProviderDto,
   ): Promise<ProjectProvider> {
-    const project = await this.projectRepository.findOne({
-      where: { id: projectId, platformAccount: { user: { id: userId } } },
-      relations: ['platformAccount'],
-    });
+    const project = await this.projectRepository.findByIdAndUserId(
+      projectId,
+      userId,
+    );
 
     if (!project) {
       throw new NotFoundException('Project not found');
     }
 
-    const existing = await this.projectProviderRepository.findOne({
-      where: {
-        project: { id: projectId },
-        type: dto.type,
-      },
-      relations: ['project'],
-    });
+    const existing =
+      await this.projectProviderRepository.findByProjectIdAndType(
+        projectId,
+        dto.type,
+      );
 
     if (existing) {
       existing.config = dto.config;
@@ -61,29 +57,27 @@ export class ProjectProviderService {
     userId: string,
     projectId: string,
   ): Promise<ProjectProvider[]> {
-    const project = await this.projectRepository.findOne({
-      where: { id: projectId, platformAccount: { user: { id: userId } } },
-      relations: ['platformAccount'],
-    });
+    const project = await this.projectRepository.findByIdAndUserId(
+      projectId,
+      userId,
+    );
 
     if (!project) {
       throw new NotFoundException('Project not found');
     }
 
-    return this.projectProviderRepository.find({
-      where: { project: { id: projectId } },
-      order: { createdAt: 'DESC' },
-    });
+    return this.projectProviderRepository.findAllByProjectId(projectId);
   }
 
   async findActiveProviderForProject(
     projectId: string,
     type: PROVIDER_TYPE_ENUM,
   ): Promise<ProjectProvider> {
-    const provider = await this.projectProviderRepository.findOne({
-      where: { project: { id: projectId }, type, isActive: true },
-      relations: ['project'],
-    });
+    const provider =
+      await this.projectProviderRepository.findActiveByProjectIdAndType(
+        projectId,
+        type,
+      );
 
     if (!provider) {
       throw new NotFoundException('Provider is not configured for project');

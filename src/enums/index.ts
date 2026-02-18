@@ -28,6 +28,12 @@ enum WALLET_ACTION_ENUM {
   WITHDRAW = 'withdraw',
 }
 
+const BASE_STATUS = {
+  PENDING: 'pending' as const,
+  SUCCESS: 'success' as const,
+  FAILED: 'failed' as const,
+};
+
 enum PAYMENT_STATUS_ENUM {
   PENDING = 'pending',
   SUCCESS = 'success',
@@ -48,4 +54,5 @@ export {
   WALLET_ACTION_ENUM,
   PAYMENT_STATUS_ENUM,
   TRANSFER_STATUS_ENUM,
+  BASE_STATUS,
 };
