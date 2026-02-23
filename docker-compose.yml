@@ -20,9 +20,11 @@ services:
       - JWT_EXPIRES_IN=1d
       - RESEND_API_KEY=${RESEND_API_KEY}
       - LEDGER_URL=${LEDGER_URL:-http://host.docker.internal:4000}
+      - WEBHOOK_URL=${WEBHOOK_URL:-http://webhook:5000}
     depends_on:
       - postgres
       - redis
+      - webhook
     volumes:
       - .:/usr/src/app
       - /usr/src/app/node_modules
@@ -48,6 +50,16 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    networks:
+      - app-network
+
+  webhook:
+    build:
+      context: ../webhook
+    environment:
+      - PORT=5000
+    ports:
+      - "5000:5000"
     networks:
       - app-network
 
