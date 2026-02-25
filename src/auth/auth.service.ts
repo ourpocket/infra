@@ -1,24 +1,22 @@
 import {
   BadRequestException,
   Injectable,
-  UnauthorizedException,
   InternalServerErrorException,
   Logger,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { CreateAccountDto } from './dto/create-account.dto';
-import { SignInDto } from './dto/sign-in.dto';
-import { VerifyEmailDto } from './dto/verify-email.dto';
-import { ResetPasswordDto } from './dto/reset-password.dto';
-import { AUTH_TYPE_ENUM } from '../enums';
-import { User } from '../entities/user.entity';
 import * as crypto from 'crypto';
 import { addMinutes } from 'date-fns';
-import { FRONTEND_URL, MESSAGES } from '../constant';
 import { MailService } from 'src/mail/mail.service';
+import { FRONTEND_URL, MESSAGES } from '../constant';
+import { User } from '../entities/user.entity';
+import { AUTH_TYPE_ENUM } from '../enums';
+import { CreateAccountDto } from './dto/create-account.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { SignInDto } from './dto/sign-in.dto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
 
 import { UserRepository } from 'src/user/user.repository';
 
