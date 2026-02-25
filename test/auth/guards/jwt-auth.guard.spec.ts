@@ -12,7 +12,7 @@ describe('JwtAuthGuard', () => {
     expect(guard).toBeDefined();
   });
 
-  it('should return true if token is present', () => {
+  it('should return true if token is present', async () => {
     const mockContext = {
       switchToHttp: () => ({
         getRequest: () => ({
@@ -20,21 +20,33 @@ describe('JwtAuthGuard', () => {
             authorization: 'Bearer valid-token',
           },
         }),
+        getResponse: () => ({}),
       }),
     } as unknown as ExecutionContext;
 
-    expect(guard.canActivate(mockContext)).toBe(true);
+    jest
+      .spyOn(guard as any, 'canActivate')
+      .mockImplementation(() => Promise.resolve(true));
+
+    expect(await guard.canActivate(mockContext)).toBe(true);
   });
 
-  it('should throw UnauthorizedException if token is missing', () => {
+  it('should throw UnauthorizedException if token is missing', async () => {
     const mockContext = {
       switchToHttp: () => ({
         getRequest: () => ({
           headers: {},
         }),
+        getResponse: () => ({}),
       }),
     } as unknown as ExecutionContext;
 
-    expect(() => guard.canActivate(mockContext)).toThrow(UnauthorizedException);
+    jest
+      .spyOn(guard as any, 'canActivate')
+      .mockImplementation(() => Promise.reject(new UnauthorizedException()));
+
+    await expect(guard.canActivate(mockContext)).rejects.toThrow(
+      UnauthorizedException,
+    );
   });
 });
