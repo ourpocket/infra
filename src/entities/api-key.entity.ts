@@ -6,6 +6,7 @@ import {
   UpdateDateColumn,
   ManyToOne,
   Unique,
+  type Relation,
 } from 'typeorm';
 import { User } from './user.entity';
 
@@ -38,7 +39,7 @@ export class ApiKey {
   @ManyToOne(() => User, (user) => user.apiKeys, {
     onDelete: 'CASCADE',
   })
-  user!: User;
+  user!: Relation<User>;
 
   @CreateDateColumn()
   createdAt!: Date;

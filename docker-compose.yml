@@ -1,4 +1,4 @@
-version: "3.9"
+version: '3.9'
 services:
   app:
     build:
@@ -6,7 +6,7 @@ services:
       target: development
     command: pnpm run start:dev
     ports:
-      - "3000:3000"
+      - '3000:3000'
     environment:
       - NODE_ENV=development
       - DATABASE_HOST=postgres
@@ -19,8 +19,8 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - JWT_EXPIRES_IN=1d
       - RESEND_API_KEY=${RESEND_API_KEY}
-      - LEDGER_URL=${LEDGER_URL:-http://host.docker.internal:4000}
-      - WEBHOOK_URL=${WEBHOOK_URL:-http://webhook:5000}
+      # - LEDGER_URL=${LEDGER_URL:-http://host.docker.internal:4000}
+      # - WEBHOOK_URL=${WEBHOOK_URL:-http://webhook:5000}
     depends_on:
       - postgres
       - redis
@@ -34,7 +34,7 @@ services:
   postgres:
     image: postgres:15-alpine
     ports:
-      - "5432:5432"
+      - '5432:5432'
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
@@ -47,7 +47,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - '6379:6379'
     volumes:
       - redis_data:/data
     networks:
@@ -59,7 +59,7 @@ services:
     environment:
       - PORT=5000
     ports:
-      - "5000:5000"
+      - '5000:5000'
     networks:
       - app-network
 

@@ -7,6 +7,7 @@ import {
   ManyToOne,
   Unique,
   JoinColumn,
+  type Relation,
 } from 'typeorm';
 import { Project } from './project.entity';
 
@@ -22,7 +23,7 @@ export class ProjectApiKey {
     onDelete: 'CASCADE',
   })
   @JoinColumn({ name: 'project_id' })
-  project!: Project;
+  project!: Relation<Project>;
 
   @Column({ type: 'enum', enum: ['test', 'live'] })
   scope!: ProjectApiKeyScope;

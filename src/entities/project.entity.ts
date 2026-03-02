@@ -8,6 +8,7 @@ import {
   ManyToOne,
   OneToMany,
   JoinColumn,
+  type Relation,
 } from 'typeorm';
 import { PlatformAccount } from './platform-account.entity';
 import { ProjectApiKey } from './project-api-key.entity';
@@ -43,7 +44,7 @@ export class Project {
     },
   )
   @JoinColumn({ name: 'platform_account_id' })
-  platformAccount!: PlatformAccount;
+  platformAccount!: Relation<PlatformAccount>;
 
   @Column({ type: 'jsonb', nullable: true })
   metadata?: Record<string, any> | null;
@@ -55,26 +56,26 @@ export class Project {
   updatedAt!: Date;
 
   @OneToMany(() => ProjectApiKey, (apiKey: ProjectApiKey) => apiKey.project)
-  apiKeys!: ProjectApiKey[];
+  apiKeys!: Relation<ProjectApiKey[]>;
 
   @OneToMany(
     () => ProjectProvider,
     (provider: ProjectProvider) => provider.project,
   )
-  providers!: ProjectProvider[];
+  providers!: Relation<ProjectProvider[]>;
 
   @OneToMany(() => ProjectAccount, (account: ProjectAccount) => account.project)
-  accounts!: ProjectAccount[];
+  accounts!: Relation<ProjectAccount[]>;
 
   @OneToMany(() => Wallet, (wallet: Wallet) => wallet.project)
-  wallets!: Wallet[];
+  wallets!: Relation<Wallet[]>;
 
   @OneToMany(() => Payment, (payment: Payment) => payment.project)
-  payments!: Payment[];
+  payments!: Relation<Payment[]>;
 
   @OneToMany(() => Transfer, (transfer: Transfer) => transfer.project)
-  transfers!: Transfer[];
+  transfers!: Relation<Transfer[]>;
 
   @OneToMany(() => Webhook, (webhook: Webhook) => webhook.project)
-  webhooks!: Webhook[];
+  webhooks!: Relation<Webhook[]>;
 }

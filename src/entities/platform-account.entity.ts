@@ -8,6 +8,7 @@ import {
   OneToOne,
   JoinColumn,
   Index,
+  type Relation,
 } from 'typeorm';
 import { User } from './user.entity';
 import { Project } from './project.entity';
@@ -20,7 +21,7 @@ export class PlatformAccount {
   @OneToOne(() => User)
   @JoinColumn({ name: 'user_id' })
   @Index('ux_platform_accounts_user_id', { unique: true })
-  user!: User;
+  user!: Relation<User>;
 
   @Column({ type: 'varchar', length: 255 })
   name!: string;
@@ -38,5 +39,5 @@ export class PlatformAccount {
   updatedAt!: Date;
 
   @OneToMany(() => Project, (project: Project) => project.platformAccount)
-  projects!: Project[];
+  projects!: Relation<Project[]>;
 }

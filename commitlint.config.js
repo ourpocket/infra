@@ -16,9 +16,10 @@ module.exports = {
         'revert',
         'style',
         'test',
+        'bug',
       ],
     ],
-    'subject-case': [2, 'always', 'sentence-case'],
+    'subject-case': [2, 'always', ['sentence-case', 'lower-case']],
     'body-max-line-length': [2, 'always', 100],
   },
 };
