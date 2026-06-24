@@ -7,6 +7,7 @@ import {
   Index,
   ManyToOne,
   JoinColumn,
+  type Relation,
 } from 'typeorm';
 import { User } from './user.entity';
 import { PROVIDER_TYPE_ENUM } from '../enums';
@@ -22,7 +23,7 @@ export class UserProvider {
 
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })
-  user!: User;
+  user!: Relation<User>;
 
   @Column({
     type: 'varchar',

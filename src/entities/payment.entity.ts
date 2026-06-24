@@ -7,6 +7,7 @@ import {
   ManyToOne,
   JoinColumn,
   Index,
+  type Relation,
 } from 'typeorm';
 import { Project } from './project.entity';
 import { ProjectAccount } from './project-account.entity';
@@ -29,7 +30,7 @@ export class Payment {
     onDelete: 'CASCADE',
   })
   @JoinColumn({ name: 'project_id' })
-  project!: Project;
+  project!: Relation<Project>;
 
   @ManyToOne(
     () => ProjectAccount,
@@ -40,11 +41,11 @@ export class Payment {
     },
   )
   @JoinColumn({ name: 'project_account_id' })
-  account?: ProjectAccount | null;
+  account?: Relation<ProjectAccount> | null;
 
   @ManyToOne(() => Wallet, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'wallet_id' })
-  wallet?: Wallet | null;
+  wallet?: Relation<Wallet> | null;
 
   @Column({ type: 'varchar', length: 50, nullable: true })
   externalReference?: string | null;

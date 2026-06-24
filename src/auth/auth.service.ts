@@ -4,10 +4,9 @@ import {
   UnauthorizedException,
   InternalServerErrorException,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { SignInDto } from './dto/sign-in.dto';
@@ -17,10 +16,11 @@ import { AUTH_TYPE_ENUM } from '../enums';
 import { User } from '../entities/user.entity';
 import * as crypto from 'crypto';
 import { addMinutes } from 'date-fns';
-import { FRONTEND_URL, MESSAGES } from '../constant';
+import { MESSAGES } from '../constant';
 import { MailService } from 'src/mail/mail.service';
 
 import { UserRepository } from 'src/user/user.repository';
+import { PlatformAccountRepository } from '../platform-account/platform-account.repository';
 
 @Injectable()
 export class AuthService {
@@ -30,6 +30,8 @@ export class AuthService {
     private readonly userRepository: UserRepository,
     private readonly jwtService: JwtService,
     private readonly mailService: MailService,
+    @Optional()
+    private readonly platformAccountRepository?: PlatformAccountRepository,
   ) {}
 
   async createAccount(
@@ -63,7 +65,7 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-    await this.mailService.sendWelcomeEmail(email, name);
+    const verificationToken = this.createExpiringToken();
 
     const user = this.userRepository.create({
       name,
@@ -75,8 +77,16 @@ export class AuthService {
       passwordHash,
       acceptTerms: !!dto.acceptTerms,
       isEmailVerified: false,
+      emailVerificationToken: verificationToken.hashedToken,
+      emailVerificationExpires: verificationToken.expiresAt,
     });
     const saved = await this.userRepository.save(user);
+    await this.ensurePlatformAccount(saved);
+    await this.mailService.sendWelcomeEmail(email, name);
+    await this.mailService.sendVerificationEmail(
+      saved.email,
+      verificationToken.rawToken,
+    );
     const { passwordHash: _, ...safe } = saved;
     return safe as Omit<User, 'passwordHash'>;
   }
@@ -111,6 +121,7 @@ export class AuthService {
     }
 
     const saved = await this.userRepository.save(user);
+    await this.ensurePlatformAccount(saved);
     const { passwordHash: _, ...safe } = saved;
     return safe as Omit<User, 'passwordHash'>;
   }
@@ -144,6 +155,7 @@ export class AuthService {
       sub: user.id,
       email: user.email,
       role: user.role,
+      status: user.status,
     };
     try {
       const token = await this.jwtService.signAsync(payload);
@@ -167,20 +179,13 @@ export class AuthService {
       return;
     }
 
-    const rawToken = crypto.randomBytes(32).toString('hex');
-    const token = crypto.createHash('sha256').update(rawToken).digest('hex');
-    const expiresAt = addMinutes(new Date(), 10);
+    const { rawToken, hashedToken, expiresAt } = this.createExpiringToken();
 
-    user.passwordResetToken = token;
+    user.passwordResetToken = hashedToken;
     user.passwordResetExpires = expiresAt;
 
     await this.userRepository.save(user);
-
-    const resetPasswordLink = `${FRONTEND_URL}/reset-password?token=${rawToken}`;
-
-    console.log(`Reset link for ${email}: ${resetPasswordLink}`);
-
-    //TODO: Send email to user.
+    await this.mailService.sendPasswordResetEmail(user.email, rawToken);
   }
 
   async verifyEmail(verifyEmailDto: VerifyEmailDto): Promise<void> {
@@ -245,12 +250,47 @@ export class AuthService {
       throw new BadRequestException(MESSAGES.AUTHENTICATION.NO_USER);
     }
 
-    const rawToken = crypto.randomBytes(32).toString('hex');
-    const token = crypto.createHash('sha256').update(rawToken).digest('hex');
-    const expiresAt = addMinutes(new Date(), 10);
-    user.emailVerificationToken = token;
+    const { rawToken, hashedToken, expiresAt } = this.createExpiringToken();
+    user.emailVerificationToken = hashedToken;
     user.emailVerificationExpires = expiresAt;
     await this.userRepository.save(user);
     await this.mailService.sendVerificationEmail(user.email, rawToken);
+  }
+
+  private createExpiringToken() {
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const hashedToken = crypto
+      .createHash('sha256')
+      .update(rawToken)
+      .digest('hex');
+    const expiresAt = addMinutes(new Date(), 10);
+
+    return {
+      rawToken,
+      hashedToken,
+      expiresAt,
+    };
+  }
+
+  private async ensurePlatformAccount(user: User): Promise<void> {
+    if (!this.platformAccountRepository) {
+      return;
+    }
+
+    const existing = await this.platformAccountRepository.findByUserId(user.id);
+    if (existing) {
+      return;
+    }
+
+    const platformAccount = this.platformAccountRepository.create({
+      user,
+      name: user.companyName || user.name,
+      companyName: user.companyName ?? null,
+      metadata: {
+        role: user.role ?? null,
+      },
+    });
+
+    await this.platformAccountRepository.save(platformAccount);
   }
 }

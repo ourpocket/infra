@@ -4,13 +4,15 @@ import { Request } from 'express';
 export interface AuthUser {
   userId: string;
   email: string;
+  role?: string | null;
+  status?: string | null;
 }
 
 export const CurrentUser = createParamDecorator(
   (
     data: keyof AuthUser | undefined,
     ctx: ExecutionContext,
-  ): AuthUser | string => {
+  ): AuthUser | AuthUser[keyof AuthUser] => {
     const request = ctx
       .switchToHttp()
       .getRequest<Request & { user?: AuthUser }>();

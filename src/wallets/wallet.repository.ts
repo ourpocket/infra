@@ -30,4 +30,11 @@ export class WalletRepository extends Repository<Wallet> {
       .andWhere('project.id = :projectId', { projectId })
       .getOne();
   }
+
+  async countByProjectId(projectId: string): Promise<number> {
+    return this.createQueryBuilder('wallet')
+      .leftJoin('wallet.project', 'project')
+      .where('project.id = :projectId', { projectId })
+      .getCount();
+  }
 }

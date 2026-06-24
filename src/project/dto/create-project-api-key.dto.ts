@@ -7,6 +7,7 @@ import {
   Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { PROJECT_API_KEY_SCOPE_ENUM } from '../../enums';
 
 export type ProjectApiKeyScopeDto = 'test' | 'live';
 
@@ -21,11 +22,11 @@ export class CreateProjectApiKeyDto {
   quota?: number;
 
   @ApiProperty({
-    enum: ['test', 'live'],
+    enum: PROJECT_API_KEY_SCOPE_ENUM,
     description: 'The scope of the API key',
-    example: 'test',
+    example: PROJECT_API_KEY_SCOPE_ENUM.TEST,
   })
-  @IsEnum(['test', 'live'])
+  @IsEnum(PROJECT_API_KEY_SCOPE_ENUM)
   scope!: ProjectApiKeyScopeDto;
 
   @ApiPropertyOptional({

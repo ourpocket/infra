@@ -6,6 +6,7 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  type Relation,
 } from 'typeorm';
 import { Project } from './project.entity';
 import { PROVIDER_TYPE_ENUM } from '../enums';
@@ -19,7 +20,7 @@ export class ProjectProvider {
     onDelete: 'CASCADE',
   })
   @JoinColumn({ name: 'project_id' })
-  project!: Project;
+  project!: Relation<Project>;
 
   @Column({
     type: 'varchar',

@@ -1,5 +1,6 @@
 import {
   IsEnum,
+  IsArray,
   IsNumberString,
   IsObject,
   IsOptional,
@@ -7,7 +8,7 @@ import {
   IsUUID,
   Length,
 } from 'class-validator';
-import { PROVIDER_TYPE_ENUM } from '../../enums';
+import { PROVIDER_TYPE_ENUM, ROUTING_STRATEGY_ENUM } from '../../enums';
 
 export class CreditWalletRequestDto {
   @IsUUID()
@@ -27,6 +28,15 @@ export class CreditWalletRequestDto {
   @IsOptional()
   @IsEnum(PROVIDER_TYPE_ENUM)
   provider?: PROVIDER_TYPE_ENUM;
+
+  @IsOptional()
+  @IsEnum(ROUTING_STRATEGY_ENUM)
+  routingStrategy?: ROUTING_STRATEGY_ENUM;
+
+  @IsOptional()
+  @IsArray()
+  @IsEnum(PROVIDER_TYPE_ENUM, { each: true })
+  providerPriority?: PROVIDER_TYPE_ENUM[];
 
   @IsOptional()
   @IsObject()

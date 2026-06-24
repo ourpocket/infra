@@ -6,6 +6,7 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  type Relation,
 } from 'typeorm';
 import { Project } from './project.entity';
 import { Wallet } from './wallet.entity';
@@ -20,19 +21,19 @@ export class Transfer {
     onDelete: 'CASCADE',
   })
   @JoinColumn({ name: 'project_id' })
-  project!: Project;
+  project!: Relation<Project>;
 
   @ManyToOne(() => Wallet, (wallet: Wallet) => wallet.outgoingTransfers, {
     onDelete: 'CASCADE',
   })
   @JoinColumn({ name: 'from_wallet_id' })
-  fromWallet!: Wallet;
+  fromWallet!: Relation<Wallet>;
 
   @ManyToOne(() => Wallet, (wallet: Wallet) => wallet.incomingTransfers, {
     onDelete: 'CASCADE',
   })
   @JoinColumn({ name: 'to_wallet_id' })
-  toWallet!: Wallet;
+  toWallet!: Relation<Wallet>;
 
   @Column({ type: 'numeric' })
   amount!: string;

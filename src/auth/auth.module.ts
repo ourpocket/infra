@@ -7,6 +7,7 @@ import { AuthController } from './auth.controller';
 import { User } from '../entities/user.entity';
 import { MailModule } from 'src/mail/mail.module';
 import { UserModule } from 'src/user/user.module';
+import { PlatformAccountModule } from '../platform-account/platform-account.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { UserModule } from 'src/user/user.module';
       inject: [ConfigService],
     }),
     MailModule,
+    PlatformAccountModule,
   ],
   controllers: [AuthController],
   providers: [AuthService],

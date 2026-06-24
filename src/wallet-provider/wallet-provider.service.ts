@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 
 import {
   ProviderType,
@@ -14,10 +14,15 @@ import { FlutterwaveService } from '../services/web2/flutterwave.service';
 import { PagaService } from '../services/web2/paga.service';
 import { FingraService } from '../services/web2/fingra.service';
 import { LedgerService } from '../ledger/ledger.service';
+import { RetryEngineService } from '../retry/retry-engine.service';
 
 @Injectable()
 export class WalletProviderService {
-  constructor(private readonly ledgerService: LedgerService) {}
+  constructor(
+    private readonly ledgerService: LedgerService,
+    @Optional()
+    private readonly retryEngineService?: RetryEngineService,
+  ) {}
 
   private providers: WalletProvider[] = [
     {
@@ -90,7 +95,9 @@ export class WalletProviderService {
   ): Promise<unknown> {
     const providerInstance = this.providerRegistry[provider];
     if (!providerInstance) throw new Error('Unsupported provider');
-    return providerInstance.createWallet(apiKey, payload);
+    return this.executeProviderCall(() =>
+      providerInstance.createWallet(apiKey, payload),
+    );
   }
 
   async fetchWallet(
@@ -100,7 +107,9 @@ export class WalletProviderService {
   ): Promise<unknown> {
     const providerInstance = this.providerRegistry[provider];
     if (!providerInstance) throw new Error('Unsupported provider');
-    return providerInstance.fetchWallet(apiKey, payload);
+    return this.executeProviderCall(() =>
+      providerInstance.fetchWallet(apiKey, payload),
+    );
   }
 
   async listWallets(
@@ -110,7 +119,9 @@ export class WalletProviderService {
   ): Promise<unknown> {
     const providerInstance = this.providerRegistry[provider];
     if (!providerInstance) throw new Error('Unsupported provider');
-    return providerInstance.listWallets(apiKey, payload);
+    return this.executeProviderCall(() =>
+      providerInstance.listWallets(apiKey, payload),
+    );
   }
 
   async deposit(
@@ -121,9 +132,8 @@ export class WalletProviderService {
     const providerInstance = this.providerRegistry[provider];
     if (!providerInstance) throw new Error('Unsupported provider');
     const { ledger, ...providerPayload } = payload;
-    const providerResponse = await providerInstance.deposit(
-      apiKey,
-      providerPayload,
+    const providerResponse = await this.executeProviderCall(() =>
+      providerInstance.deposit(apiKey, providerPayload),
     );
 
     if (!ledger) {
@@ -146,9 +156,8 @@ export class WalletProviderService {
     const providerInstance = this.providerRegistry[provider];
     if (!providerInstance) throw new Error('Unsupported provider');
     const { ledger, ...providerPayload } = payload;
-    const providerResponse = await providerInstance.withdraw(
-      apiKey,
-      providerPayload,
+    const providerResponse = await this.executeProviderCall(() =>
+      providerInstance.withdraw(apiKey, providerPayload),
     );
 
     if (!ledger) {
@@ -161,5 +170,13 @@ export class WalletProviderService {
       provider: providerResponse,
       ledger: ledgerResponse,
     };
+  }
+
+  private executeProviderCall<T>(operation: () => Promise<T>): Promise<T> {
+    if (this.retryEngineService) {
+      return this.retryEngineService.execute(operation);
+    }
+
+    return operation();
   }
 }

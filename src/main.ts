@@ -2,9 +2,9 @@ import { NestFactory, Reflector } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { VersioningType } from '@nestjs/common';
+import { ValidationPipe, VersioningType } from '@nestjs/common';
 
-async function bootstrap() {
+export async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.enableCors({
     origin: '*',
@@ -14,6 +14,14 @@ async function bootstrap() {
     type: VersioningType.URI,
     defaultVersion: '1',
   });
+
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
 
   app.useGlobalInterceptors(new ResponseInterceptor(app.get(Reflector)));
 
@@ -29,7 +37,9 @@ async function bootstrap() {
 
   await app.listen(process.env.PORT ?? 3000);
 }
-void bootstrap().catch((error) => {
-  console.error('Failed to start application:', error);
-  process.exit(1);
-});
+if (require.main === module) {
+  void bootstrap().catch((error) => {
+    console.error('Failed to start application:', error);
+    process.exit(1);
+  });
+}

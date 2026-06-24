@@ -16,6 +16,7 @@ import { ProviderType } from '../interface/wallet-provider.interface';
 import { ProjectProviderService } from '../project/project-provider.service';
 import { WalletRepository } from './wallet.repository';
 import { ProjectAccountRepository } from './project-account.repository';
+import { PROVIDER_TYPE_ENUM, ROUTING_STRATEGY_ENUM } from '../enums';
 
 @Injectable()
 export class WalletsService {
@@ -103,10 +104,8 @@ export class WalletsService {
       throw new NotFoundException('Wallet not found');
     }
 
-    if (
-      fromWallet.currency !== dto.currency ||
-      toWallet.currency !== dto.currency
-    ) {
+    const currency = dto.currency.toUpperCase();
+    if (fromWallet.currency !== currency || toWallet.currency !== currency) {
       throw new UnauthorizedException('Wallet currency mismatch');
     }
 
@@ -148,11 +147,18 @@ export class WalletsService {
       throw new NotFoundException('Wallet not found');
     }
 
-    if (wallet.currency !== dto.currency) {
+    if (wallet.currency !== dto.currency.toUpperCase()) {
       throw new UnauthorizedException('Wallet currency mismatch');
     }
 
-    if (!dto.provider) {
+    const provider = await this.resolveProviderType(
+      projectId,
+      dto.provider,
+      dto.routingStrategy,
+      dto.providerPriority,
+    );
+
+    if (!provider) {
       return this.ledgerService.executeTransaction({
         projectId,
         reference: dto.reference,
@@ -171,11 +177,11 @@ export class WalletsService {
     const providerApiKey =
       await this.projectProviderService.getProviderApiKeyForProject(
         projectId,
-        dto.provider,
+        provider,
       );
 
     return this.walletProviderService.deposit(
-      dto.provider as ProviderType,
+      provider as ProviderType,
       providerApiKey,
       {
         ...(dto.providerPayload ?? {}),
@@ -214,11 +220,18 @@ export class WalletsService {
       throw new NotFoundException('Wallet not found');
     }
 
-    if (wallet.currency !== dto.currency) {
+    if (wallet.currency !== dto.currency.toUpperCase()) {
       throw new UnauthorizedException('Wallet currency mismatch');
     }
 
-    if (!dto.provider) {
+    const provider = await this.resolveProviderType(
+      projectId,
+      dto.provider,
+      dto.routingStrategy,
+      dto.providerPriority,
+    );
+
+    if (!provider) {
       return this.ledgerService.executeTransaction({
         projectId,
         reference: dto.reference,
@@ -237,11 +250,11 @@ export class WalletsService {
     const providerApiKey =
       await this.projectProviderService.getProviderApiKeyForProject(
         projectId,
-        dto.provider,
+        provider,
       );
 
     return this.walletProviderService.withdraw(
-      dto.provider as ProviderType,
+      provider as ProviderType,
       providerApiKey,
       {
         ...(dto.providerPayload ?? {}),
@@ -260,5 +273,29 @@ export class WalletsService {
         },
       },
     );
+  }
+
+  private async resolveProviderType(
+    projectId: string,
+    provider?: PROVIDER_TYPE_ENUM,
+    strategy?: ROUTING_STRATEGY_ENUM,
+    priority?: PROVIDER_TYPE_ENUM[],
+  ): Promise<PROVIDER_TYPE_ENUM | undefined> {
+    if (provider) {
+      return provider;
+    }
+
+    if (!strategy) {
+      return undefined;
+    }
+
+    const selectedProvider =
+      await this.projectProviderService.selectProviderForProject(
+        projectId,
+        strategy,
+        priority,
+      );
+
+    return selectedProvider.type;
   }
 }

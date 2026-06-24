@@ -8,6 +8,7 @@ import {
   OneToMany,
   JoinColumn,
   Index,
+  type Relation,
 } from 'typeorm';
 import { Project } from './project.entity';
 import { ProjectAccount } from './project-account.entity';
@@ -29,7 +30,7 @@ export class Wallet {
     onDelete: 'CASCADE',
   })
   @JoinColumn({ name: 'project_id' })
-  project!: Project;
+  project!: Relation<Project>;
 
   @ManyToOne(
     () => ProjectAccount,
@@ -40,7 +41,7 @@ export class Wallet {
     },
   )
   @JoinColumn({ name: 'project_account_id' })
-  account?: ProjectAccount | null;
+  account?: Relation<ProjectAccount> | null;
 
   @Column({ type: 'varchar', length: 10 })
   currency!: string;
@@ -52,8 +53,8 @@ export class Wallet {
   updatedAt!: Date;
 
   @OneToMany(() => Transfer, (transfer: Transfer) => transfer.fromWallet)
-  outgoingTransfers!: Transfer[];
+  outgoingTransfers!: Relation<Transfer[]>;
 
   @OneToMany(() => Transfer, (transfer: Transfer) => transfer.toWallet)
-  incomingTransfers!: Transfer[];
+  incomingTransfers!: Relation<Transfer[]>;
 }

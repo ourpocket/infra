@@ -18,8 +18,14 @@ import { DebitWalletRequestDto } from './dto/debit-wallet.dto';
 export class WalletsController {
   constructor(private readonly walletsService: WalletsService) {}
 
-  @Post()
+  @Post('create')
   createWallet(@Req() req: Request, @Body() dto: CreateWalletRequestDto) {
+    const apiKey = this.resolveApiKey(req);
+    return this.walletsService.createWallet(apiKey, dto);
+  }
+
+  @Post()
+  createWalletLegacy(@Req() req: Request, @Body() dto: CreateWalletRequestDto) {
     const apiKey = this.resolveApiKey(req);
     return this.walletsService.createWallet(apiKey, dto);
   }

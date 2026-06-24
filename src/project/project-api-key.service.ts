@@ -11,10 +11,11 @@ import {
 } from '../entities/project-api-key.entity';
 import { Project } from '../entities/project.entity';
 import { generateApiKey } from '../helpers';
-import { API_KEY_PREFIX } from '../constant';
+import { API_KEY_PREFIX, PROJECT_API_KEY_PREFIX } from '../constant';
 import { CreateProjectApiKeyDto } from './dto/create-project-api-key.dto';
 import { ProjectApiKeyRepository } from './project-api-key.repository';
 import { ProjectRepository } from './project.repository';
+import { PROJECT_API_KEY_SCOPE_ENUM } from '../enums';
 
 export interface ProjectApiKeyResponse {
   id: string;
@@ -24,6 +25,10 @@ export interface ProjectApiKeyResponse {
   expiresAt?: Date;
   createdAt: Date;
 }
+
+export type ProjectApiKeyListItem = Omit<ProjectApiKey, 'hashedKey'> & {
+  keyPreview: string;
+};
 
 @Injectable()
 export class ProjectApiKeyService {
@@ -73,7 +78,7 @@ export class ProjectApiKeyService {
 
     return {
       id: savedApiKey.id,
-      rawKey: `${API_KEY_PREFIX}${rawKey}`,
+      rawKey: `${PROJECT_API_KEY_PREFIX[savedApiKey.scope]}${rawKey}`,
       scope: savedApiKey.scope,
       description: savedApiKey.description ?? undefined,
       expiresAt: savedApiKey.expiresAt ?? undefined,
@@ -82,10 +87,7 @@ export class ProjectApiKeyService {
   }
 
   async verifyProjectApiKey(incomingKey: string): Promise<ProjectApiKey> {
-    const prefix = API_KEY_PREFIX;
-    const rawKey = incomingKey.startsWith(prefix)
-      ? incomingKey.slice(prefix.length)
-      : incomingKey;
+    const { rawKey, scope } = this.extractRawKey(incomingKey);
 
     const hashedKey = crypto.createHash('sha256').update(rawKey).digest('hex');
 
@@ -99,6 +101,20 @@ export class ProjectApiKeyService {
     if (matchedKey.expiresAt && new Date() > matchedKey.expiresAt) {
       throw new UnauthorizedException('Project API key has expired');
     }
+
+    if (scope && matchedKey.scope !== scope) {
+      throw new UnauthorizedException('Invalid project API key scope');
+    }
+
+    const used = matchedKey.used ?? 0;
+    const quota = matchedKey.quota ?? Number.MAX_SAFE_INTEGER;
+
+    if (used >= quota) {
+      throw new UnauthorizedException('Project API key quota exceeded');
+    }
+
+    matchedKey.used = used + 1;
+    await this.projectApiKeyRepository.save(matchedKey);
 
     return matchedKey;
   }
@@ -125,7 +141,7 @@ export class ProjectApiKeyService {
   async getProjectApiKeys(
     userId: string,
     projectId: string,
-  ): Promise<Omit<ProjectApiKey, 'hashedKey'>[]> {
+  ): Promise<ProjectApiKeyListItem[]> {
     const project = await this.projectRepository.findByIdAndUserId(
       projectId,
       userId,
@@ -139,6 +155,40 @@ export class ProjectApiKeyService {
       project.id,
     );
 
-    return apiKeys.map(({ hashedKey, ...rest }) => rest);
+    return apiKeys.map(({ hashedKey, ...rest }) => ({
+      ...rest,
+      keyPreview: `${PROJECT_API_KEY_PREFIX[rest.scope]}********`,
+    }));
+  }
+
+  private extractRawKey(incomingKey: string): {
+    rawKey: string;
+    scope?: ProjectApiKeyScope;
+  } {
+    const normalizedKey = incomingKey.trim();
+
+    if (normalizedKey.startsWith(PROJECT_API_KEY_PREFIX.test)) {
+      return {
+        rawKey: normalizedKey.slice(PROJECT_API_KEY_PREFIX.test.length),
+        scope: PROJECT_API_KEY_SCOPE_ENUM.TEST,
+      };
+    }
+
+    if (normalizedKey.startsWith(PROJECT_API_KEY_PREFIX.live)) {
+      return {
+        rawKey: normalizedKey.slice(PROJECT_API_KEY_PREFIX.live.length),
+        scope: PROJECT_API_KEY_SCOPE_ENUM.LIVE,
+      };
+    }
+
+    if (normalizedKey.startsWith(API_KEY_PREFIX)) {
+      return {
+        rawKey: normalizedKey.slice(API_KEY_PREFIX.length),
+      };
+    }
+
+    return {
+      rawKey: normalizedKey,
+    };
   }
 }

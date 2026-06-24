@@ -12,15 +12,13 @@ export interface SendEmailParams {
 
 @Injectable()
 export class MailService {
-  private readonly resend: Resend;
+  private readonly resend?: Resend;
 
   constructor(private readonly configService: ConfigService) {
     const apiKey = this.configService.get<string>('RESEND_API_KEY');
-    if (!apiKey) {
-      throw new Error('RESEND_API_KEY is missing');
+    if (apiKey) {
+      this.resend = new Resend(apiKey);
     }
-
-    this.resend = new Resend(apiKey);
   }
 
   async sendEmail({
@@ -48,6 +46,14 @@ export class MailService {
       };
     } else {
       throw new Error('Either html or text must be provided');
+    }
+
+    if (!this.resend) {
+      return {
+        skipped: true,
+        to,
+        subject,
+      };
     }
 
     const { data, error } = await this.resend.emails.send(emailOptions);

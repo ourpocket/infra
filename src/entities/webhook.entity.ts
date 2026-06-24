@@ -6,6 +6,7 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  type Relation,
 } from 'typeorm';
 import { Project } from './project.entity';
 
@@ -18,7 +19,7 @@ export class Webhook {
     onDelete: 'CASCADE',
   })
   @JoinColumn({ name: 'project_id' })
-  project!: Project;
+  project!: Relation<Project>;
 
   @Column({ type: 'varchar', length: 255 })
   url!: string;

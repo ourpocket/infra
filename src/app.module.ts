@@ -18,6 +18,9 @@ import { MailModule } from './mail/mail.module';
 import { UserProviderModule } from './user-provider/user-provider.module';
 import { ProjectModule } from './project/project.module';
 import { WalletsModule } from './wallets/wallets.module';
+import { TransactionsModule } from './transactions/transactions.module';
+import { WebhooksModule } from './webhooks/webhooks.module';
+import { UsageModule } from './usage/usage.module';
 
 const TypeORMConfigModule = TypeOrmModule.forRootAsync({
   imports: [NestConfigModule],
@@ -34,6 +37,9 @@ const TypeORMConfigModule = TypeOrmModule.forRootAsync({
     UserProviderModule,
     ProjectModule,
     WalletsModule,
+    TransactionsModule,
+    WebhooksModule,
+    UsageModule,
     ThrottlerModule.forRoot({
       throttlers: [
         {
