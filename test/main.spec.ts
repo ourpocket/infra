@@ -38,6 +38,7 @@ describe('main bootstrap', () => {
     const appMock = {
       enableCors: jest.fn(),
       enableVersioning: jest.fn(),
+      useGlobalPipes: jest.fn(),
       useGlobalInterceptors: jest.fn(),
       get: jest.fn(),
       listen: jest.fn().mockResolvedValue(undefined),
@@ -45,11 +46,13 @@ describe('main bootstrap', () => {
 
     (NestFactory.create as jest.Mock).mockResolvedValue(appMock);
 
-    await import('../src/main');
+    const { bootstrap } = await import('../src/main');
+    await bootstrap();
 
     expect((NestFactory as any).create).toHaveBeenCalledWith(AppModule);
     expect(appMock.enableCors).toHaveBeenCalledWith({ origin: '*' });
     expect(appMock.enableVersioning).toHaveBeenCalled();
+    expect(appMock.useGlobalPipes).toHaveBeenCalled();
     expect(appMock.useGlobalInterceptors).toHaveBeenCalledWith(
       expect.any(ResponseInterceptor),
     );

@@ -197,6 +197,7 @@ describe('AuthService', () => {
         sub: user.id,
         email: user.email,
         role: user.role,
+        status: user.status,
       });
     });
   });
@@ -303,7 +304,10 @@ describe('AuthService', () => {
           passwordResetExpires: expect.any(Date),
         }),
       );
-      expect(mailService.sendPasswordResetEmail).not.toHaveBeenCalled();
+      expect(mailService.sendPasswordResetEmail).toHaveBeenCalledWith(
+        user.email,
+        expect.any(String),
+      );
     });
   });
 

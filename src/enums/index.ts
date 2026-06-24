@@ -20,6 +20,18 @@ enum PROVIDER_TYPE_ENUM {
   FINGRA = 'fingra',
 }
 
+enum PROJECT_API_KEY_SCOPE_ENUM {
+  TEST = 'test',
+  LIVE = 'live',
+}
+
+enum ROUTING_STRATEGY_ENUM {
+  BEST_SUCCESS_RATE = 'best_success_rate',
+  LOWEST_FEES = 'lowest_fees',
+  FASTEST_SETTLEMENT = 'fastest_settlement',
+  CUSTOM_PRIORITY = 'custom_priority',
+}
+
 enum WALLET_ACTION_ENUM {
   CREATE_WALLET = 'create_wallet',
   FETCH_WALLET = 'fetch_wallet',
@@ -46,13 +58,40 @@ enum TRANSFER_STATUS_ENUM {
   FAILED = 'failed',
 }
 
+enum TRANSACTION_TYPE_ENUM {
+  CREDIT = 'credit',
+  DEBIT = 'debit',
+  TRANSFER = 'transfer',
+}
+
+enum TRANSACTION_STATUS_ENUM {
+  PENDING = 'pending',
+  SUCCESS = 'success',
+  FAILED = 'failed',
+}
+
+enum WEBHOOK_EVENT_ENUM {
+  TRANSACTION_SUCCESS = 'transaction.success',
+  TRANSACTION_FAILED = 'transaction.failed',
+  WALLET_CREATED = 'wallet.created',
+  WALLET_CREDITED = 'wallet.credited',
+  WALLET_DEBITED = 'wallet.debited',
+  TRANSFER_SUCCESS = 'transfer.success',
+  TRANSFER_FAILED = 'transfer.failed',
+}
+
 export {
   AUTH_TYPE_ENUM,
   API_ENVIROMENT,
   USERS_STATUS_ENUM,
   PROVIDER_TYPE_ENUM,
+  PROJECT_API_KEY_SCOPE_ENUM,
+  ROUTING_STRATEGY_ENUM,
   WALLET_ACTION_ENUM,
   PAYMENT_STATUS_ENUM,
   TRANSFER_STATUS_ENUM,
+  TRANSACTION_TYPE_ENUM,
+  TRANSACTION_STATUS_ENUM,
+  WEBHOOK_EVENT_ENUM,
   BASE_STATUS,
 };

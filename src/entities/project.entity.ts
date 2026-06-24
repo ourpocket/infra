@@ -18,6 +18,7 @@ import { Wallet } from './wallet.entity';
 import { Payment } from './payment.entity';
 import { Transfer } from './transfer.entity';
 import { Webhook } from './webhook.entity';
+import { Transaction } from './transaction.entity';
 
 @Entity({ name: 'projects' })
 @Index('ux_projects_slug_platform_account_id', ['slug', 'platformAccount'], {
@@ -75,6 +76,12 @@ export class Project {
 
   @OneToMany(() => Transfer, (transfer: Transfer) => transfer.project)
   transfers!: Relation<Transfer[]>;
+
+  @OneToMany(
+    () => Transaction,
+    (transaction: Transaction) => transaction.project,
+  )
+  transactions!: Relation<Transaction[]>;
 
   @OneToMany(() => Webhook, (webhook: Webhook) => webhook.project)
   webhooks!: Relation<Webhook[]>;

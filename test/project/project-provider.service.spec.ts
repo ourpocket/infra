@@ -70,9 +70,21 @@ describe('ProjectProviderService', () => {
       projectProviderRepository.save.mockResolvedValue(existingProvider);
 
       const result = await service.configureProvider(userId, projectId, dto);
-      expect(result).toEqual(existingProvider);
+      expect(result).toEqual({
+        ...existingProvider,
+        config: {
+          apiKey: 'sk_t********_123',
+        },
+      });
       expect(projectProviderRepository.save).toHaveBeenCalledWith(
-        existingProvider,
+        expect.objectContaining({
+          config: expect.objectContaining({
+            encrypted: true,
+            iv: expect.any(String),
+            tag: expect.any(String),
+            data: expect.any(String),
+          }),
+        }),
       );
     });
 
@@ -84,8 +96,22 @@ describe('ProjectProviderService', () => {
       projectProviderRepository.save.mockResolvedValue(newProvider);
 
       const result = await service.configureProvider(userId, projectId, dto);
-      expect(result).toEqual(newProvider);
-      expect(projectProviderRepository.create).toHaveBeenCalled();
+      expect(result).toEqual({
+        ...newProvider,
+        config: {
+          apiKey: 'sk_t********_123',
+        },
+      });
+      expect(projectProviderRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            encrypted: true,
+            iv: expect.any(String),
+            tag: expect.any(String),
+            data: expect.any(String),
+          }),
+        }),
+      );
       expect(projectProviderRepository.save).toHaveBeenCalled();
     });
   });
@@ -108,7 +134,7 @@ describe('ProjectProviderService', () => {
       projectProviderRepository.findAllByProjectId.mockResolvedValue(providers);
 
       const result = await service.listProvidersForProject(userId, projectId);
-      expect(result).toBe(providers);
+      expect(result).toEqual([{ id: 'prov-1', config: {} }]);
     });
   });
 

@@ -14,6 +14,7 @@ import { ProjectRepository } from './project.repository';
 import { ProjectApiKeyRepository } from './project-api-key.repository';
 import { ProjectProviderRepository } from './project-provider.repository';
 import { PlatformAccountModule } from '../platform-account/platform-account.module';
+import { ProjectApiKeyGuard } from './guards/project-api-key.guard';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { PlatformAccountModule } from '../platform-account/platform-account.modu
     ProjectRepository,
     ProjectApiKeyRepository,
     ProjectProviderRepository,
+    ProjectApiKeyGuard,
   ],
   exports: [
     ProjectService,
@@ -40,6 +42,7 @@ import { PlatformAccountModule } from '../platform-account/platform-account.modu
     ProjectRepository,
     ProjectApiKeyRepository,
     ProjectProviderRepository,
+    ProjectApiKeyGuard,
   ],
 })
 export class ProjectModule {}

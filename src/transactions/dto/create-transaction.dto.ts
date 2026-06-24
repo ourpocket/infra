@@ -1,6 +1,6 @@
 import {
-  IsEnum,
   IsArray,
+  IsEnum,
   IsNumberString,
   IsObject,
   IsOptional,
@@ -8,11 +8,15 @@ import {
   IsUUID,
   Length,
 } from 'class-validator';
-import { PROVIDER_TYPE_ENUM, ROUTING_STRATEGY_ENUM } from '../../enums';
+import {
+  PROVIDER_TYPE_ENUM,
+  ROUTING_STRATEGY_ENUM,
+  TRANSACTION_TYPE_ENUM,
+} from '../../enums';
 
-export class CreditWalletRequestDto {
-  @IsUUID()
-  walletId!: string;
+export class CreateTransactionDto {
+  @IsEnum(TRANSACTION_TYPE_ENUM)
+  type!: TRANSACTION_TYPE_ENUM;
 
   @IsNumberString()
   amount!: string;
@@ -24,6 +28,18 @@ export class CreditWalletRequestDto {
   @IsString()
   @Length(5, 120)
   reference!: string;
+
+  @IsOptional()
+  @IsUUID()
+  walletId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  fromWalletId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  toWalletId?: string;
 
   @IsOptional()
   @IsEnum(PROVIDER_TYPE_ENUM)
@@ -43,5 +59,6 @@ export class CreditWalletRequestDto {
   providerPayload?: Record<string, unknown>;
 
   @IsOptional()
+  @IsObject()
   metadata?: Record<string, unknown>;
 }

@@ -10,6 +10,7 @@ import {
   type Relation,
 } from 'typeorm';
 import { Project } from './project.entity';
+import { PROJECT_API_KEY_SCOPE_ENUM } from '../enums';
 
 export type ProjectApiKeyScope = 'test' | 'live';
 
@@ -25,7 +26,7 @@ export class ProjectApiKey {
   @JoinColumn({ name: 'project_id' })
   project!: Relation<Project>;
 
-  @Column({ type: 'enum', enum: ['test', 'live'] })
+  @Column({ type: 'enum', enum: PROJECT_API_KEY_SCOPE_ENUM })
   scope!: ProjectApiKeyScope;
 
   @Column({ nullable: true })

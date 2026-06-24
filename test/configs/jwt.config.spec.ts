@@ -21,12 +21,12 @@ describe('JwtConfig', () => {
     expect(config.expiresIn).toBe('1h');
   });
 
-  it('should return undefined if env vars are missing', () => {
+  it('should return safe defaults if env vars are missing', () => {
     delete process.env.JWT_SECRET;
     delete process.env.JWT_EXPIRES_IN;
 
     const config = jwtConfig();
-    expect(config.secret).toBeUndefined();
-    expect(config.expiresIn).toBeUndefined();
+    expect(config.secret).toBe('ourpocket-development-secret');
+    expect(config.expiresIn).toBe('1d');
   });
 });

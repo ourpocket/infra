@@ -1,4 +1,4 @@
-import { IsEnum, IsObject, IsOptional } from 'class-validator';
+import { IsBoolean, IsEnum, IsObject, IsOptional } from 'class-validator';
 import { PROVIDER_TYPE_ENUM } from '../../enums';
 
 export class ConfigureProjectProviderDto {
@@ -9,5 +9,6 @@ export class ConfigureProjectProviderDto {
   config!: Record<string, unknown>;
 
   @IsOptional()
+  @IsBoolean()
   isActive?: boolean;
 }

@@ -11,6 +11,7 @@ export class ProjectApiKeyRepository extends Repository<ProjectApiKey> {
   async findByHashedKey(hashedKey: string): Promise<ProjectApiKey | null> {
     return this.createQueryBuilder('projectApiKey')
       .leftJoinAndSelect('projectApiKey.project', 'project')
+      .leftJoinAndSelect('project.platformAccount', 'platformAccount')
       .where('projectApiKey.hashedKey = :hashedKey', { hashedKey })
       .getOne();
   }
