@@ -22,7 +22,7 @@ import { CreateUserProviderDto } from './dto/create-user-provider.dto';
 import { UpdateUserProviderDto } from './dto/update-user-provider.dto';
 import { UserProviderResponseDto } from './dto/user-provider-response.dto';
 
-@ApiTags('User Providers 👤')
+@ApiTags('User Providers')
 @Controller('user-providers')
 @UseGuards(JwtAuthGuard, UserStatusGuard)
 @ApiBearerAuth()

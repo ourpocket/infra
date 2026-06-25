@@ -21,7 +21,7 @@ import { UserStatusGuard } from '../auth/guards/user-status.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 @Controller('api-key')
-@ApiTags('Api Keys 🔑')
+@ApiTags('Api Keys')
 @UseGuards(JwtAuthGuard, UserStatusGuard)
 @ApiBearerAuth()
 export class ApiKeyController {

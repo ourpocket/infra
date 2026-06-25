@@ -26,8 +26,12 @@ export interface ProjectApiKeyResponse {
   createdAt: Date;
 }
 
-export type ProjectApiKeyListItem = Omit<ProjectApiKey, 'hashedKey'> & {
+export type ProjectApiKeyListItem = Omit<
+  ProjectApiKey,
+  'hashedKey' | 'encryptedKey'
+> & {
   keyPreview: string;
+  rawKey?: string;
 };
 
 @Injectable()
@@ -64,6 +68,7 @@ export class ProjectApiKeyService {
     }
 
     const { rawKey, hashedKey } = generateApiKey(32);
+    const prefixedRawKey = `${PROJECT_API_KEY_PREFIX[dto.scope]}${rawKey}`;
 
     const apiKey = this.projectApiKeyRepository.create({
       project,
@@ -72,13 +77,14 @@ export class ProjectApiKeyService {
       expiresAt: dto.expiresAt,
       quota: dto.quota ?? 1000,
       hashedKey,
+      encryptedKey: this.encryptApiKey(prefixedRawKey),
     });
 
     const savedApiKey = await this.projectApiKeyRepository.save(apiKey);
 
     return {
       id: savedApiKey.id,
-      rawKey: `${PROJECT_API_KEY_PREFIX[savedApiKey.scope]}${rawKey}`,
+      rawKey: prefixedRawKey,
       scope: savedApiKey.scope,
       description: savedApiKey.description ?? undefined,
       expiresAt: savedApiKey.expiresAt ?? undefined,
@@ -155,10 +161,80 @@ export class ProjectApiKeyService {
       project.id,
     );
 
-    return apiKeys.map(({ hashedKey, ...rest }) => ({
-      ...rest,
-      keyPreview: `${PROJECT_API_KEY_PREFIX[rest.scope]}********`,
-    }));
+    return apiKeys.map(({ hashedKey, encryptedKey, ...rest }) => {
+      const rawKey = this.decryptApiKey(encryptedKey);
+
+      return {
+        ...rest,
+        rawKey,
+        keyPreview: rawKey
+          ? this.maskApiKey(rawKey)
+          : `${PROJECT_API_KEY_PREFIX[rest.scope]}********`,
+      };
+    });
+  }
+
+  private encryptApiKey(rawKey: string): string {
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv(
+      'aes-256-gcm',
+      this.getEncryptionKey(),
+      iv,
+    );
+    const encrypted = Buffer.concat([
+      cipher.update(rawKey, 'utf8'),
+      cipher.final(),
+    ]);
+    const tag = cipher.getAuthTag();
+
+    return [
+      iv.toString('base64'),
+      tag.toString('base64'),
+      encrypted.toString('base64'),
+    ].join('.');
+  }
+
+  private decryptApiKey(encryptedKey?: string | null): string | undefined {
+    if (!encryptedKey) {
+      return undefined;
+    }
+
+    try {
+      const [ivValue, tagValue, encryptedValue] = encryptedKey.split('.');
+      if (!ivValue || !tagValue || !encryptedValue) {
+        return undefined;
+      }
+
+      const decipher = crypto.createDecipheriv(
+        'aes-256-gcm',
+        this.getEncryptionKey(),
+        Buffer.from(ivValue, 'base64'),
+      );
+      decipher.setAuthTag(Buffer.from(tagValue, 'base64'));
+
+      return Buffer.concat([
+        decipher.update(Buffer.from(encryptedValue, 'base64')),
+        decipher.final(),
+      ]).toString('utf8');
+    } catch {
+      return undefined;
+    }
+  }
+
+  private getEncryptionKey(): Buffer {
+    const secret =
+      process.env.PROJECT_API_KEY_ENCRYPTION_SECRET ??
+      process.env.JWT_SECRET ??
+      process.env.APP_SECRET ??
+      'ourpocket-local-project-api-key-secret';
+
+    return crypto.createHash('sha256').update(secret).digest();
+  }
+
+  private maskApiKey(apiKey: string): string {
+    return apiKey.length > 18
+      ? `${apiKey.slice(0, 14)}${'*'.repeat(8)}`
+      : apiKey;
   }
 
   private extractRawKey(incomingKey: string): {

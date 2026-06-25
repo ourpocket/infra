@@ -54,16 +54,6 @@ describe('ProjectService', () => {
       );
     });
 
-    it('should throw ConflictException if project with slug exists', async () => {
-      platformAccountRepository.findByUserId.mockResolvedValue({
-        id: 'account-id',
-      });
-      projectRepository.findBySlugAndPlatformAccountId.mockResolvedValue({});
-      await expect(service.createProject(userId, dto)).rejects.toThrow(
-        ConflictException,
-      );
-    });
-
     it('should create and return project', async () => {
       platformAccountRepository.findByUserId.mockResolvedValue({
         id: 'account-id',
@@ -78,6 +68,22 @@ describe('ProjectService', () => {
       expect(projectRepository.save).toHaveBeenCalledWith(savedProject);
     });
 
+    it('should create a unique generated slug when the name slug already exists', async () => {
+      platformAccountRepository.findByUserId.mockResolvedValue({
+        id: 'account-id',
+      });
+      projectRepository.findBySlugAndPlatformAccountId
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce(null);
+      projectRepository.create.mockReturnValue(dto);
+      projectRepository.save.mockResolvedValue(dto);
+
+      await service.createProject(userId, dto);
+      expect(projectRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ slug: 'my-project-2' }),
+      );
+    });
+
     it('should use provided slug if available', async () => {
       const dtoWithSlug = { ...dto, slug: 'custom-slug' };
       platformAccountRepository.findByUserId.mockResolvedValue({
@@ -90,6 +96,18 @@ describe('ProjectService', () => {
       await service.createProject(userId, dtoWithSlug);
       expect(projectRepository.create).toHaveBeenCalledWith(
         expect.objectContaining({ slug: 'custom-slug' }),
+      );
+    });
+
+    it('should throw ConflictException if provided slug exists', async () => {
+      const dtoWithSlug = { ...dto, slug: 'custom-slug' };
+      platformAccountRepository.findByUserId.mockResolvedValue({
+        id: 'account-id',
+      });
+      projectRepository.findBySlugAndPlatformAccountId.mockResolvedValue({});
+
+      await expect(service.createProject(userId, dtoWithSlug)).rejects.toThrow(
+        ConflictException,
       );
     });
   });

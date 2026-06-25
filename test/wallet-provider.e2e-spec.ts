@@ -7,7 +7,8 @@ import { WalletProviderService } from '../src/wallet-provider/wallet-provider.se
 import { ProjectApiKeyService } from '../src/project/project-api-key.service';
 import { ProjectProviderService } from '../src/project/project-provider.service';
 import { LedgerService } from '../src/ledger/ledger.service';
-import { WEB2_ENDPOINT_URL } from '../src/constant/web2-endpoints';
+import { RoutingEngineService } from '../src/routing/routing-engine.service';
+import { FlutterwaveService, PaystackService } from '../src/services/web2';
 
 describe('WalletProvider (e2e)', () => {
   let app: INestApplication;
@@ -30,6 +31,9 @@ describe('WalletProvider (e2e)', () => {
       controllers: [WalletProviderController],
       providers: [
         WalletProviderService,
+        RoutingEngineService,
+        PaystackService,
+        FlutterwaveService,
         {
           provide: ProjectApiKeyService,
           useValue: projectApiKeyService,
@@ -74,7 +78,6 @@ describe('WalletProvider (e2e)', () => {
       mockProviderKey,
     );
 
-    // Mock Paystack API
     nock('https://api.paystack.co')
       .post('/customer', mockPayload)
       .reply(200, {
@@ -137,7 +140,6 @@ describe('WalletProvider (e2e)', () => {
       status: 'success',
     });
 
-    // Mock Paystack API
     nock('https://api.paystack.co')
       .post('/transaction/initialize', {
         amount: 5000,
@@ -177,6 +179,7 @@ describe('WalletProvider (e2e)', () => {
         id: 'tx_123',
         status: 'success',
       },
+      selectedProvider: 'paystack',
     });
 
     expect(ledgerService.executeTransaction).toHaveBeenCalledWith(

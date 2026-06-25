@@ -3,11 +3,11 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Transaction } from '../entities/transaction.entity';
 import { LedgerModule } from '../ledger/ledger.module';
 import { ProjectModule } from '../project/project.module';
-import { WalletProviderModule } from '../wallet-provider/wallet-provider.module';
 import { WalletsModule } from '../wallets/wallets.module';
 import { TransactionRepository } from './transaction.repository';
 import { TransactionsController } from './transactions.controller';
 import { TransactionsService } from './transactions.service';
+import { RoutingEngineModule } from '../routing/routing-engine.module';
 
 @Module({
   imports: [
@@ -15,7 +15,7 @@ import { TransactionsService } from './transactions.service';
     ProjectModule,
     WalletsModule,
     LedgerModule,
-    WalletProviderModule,
+    RoutingEngineModule,
   ],
   controllers: [TransactionsController],
   providers: [TransactionsService, TransactionRepository],

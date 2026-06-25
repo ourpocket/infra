@@ -19,7 +19,11 @@ export class TransactionsController {
   constructor(private readonly transactionsService: TransactionsService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create a unified wallet transaction' })
+  @ApiOperation({
+    summary: 'Create a unified wallet transaction',
+    description:
+      'Creates credit, debit, or transfer transactions. Credit and debit can route through Paystack or Flutterwave when provider credentials are supplied in the request body.',
+  })
   @ApiResponse({ status: 201, description: 'Transaction created' })
   createTransaction(
     @CurrentProjectApiKey() projectApiKey: ProjectApiKey,
@@ -29,7 +33,11 @@ export class TransactionsController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get a unified transaction by id' })
+  @ApiOperation({
+    summary: 'Get a unified transaction by id',
+    description:
+      'Returns a transaction created under the authenticated project.',
+  })
   @ApiResponse({ status: 200, description: 'Transaction retrieved' })
   getTransaction(
     @CurrentProjectApiKey() projectApiKey: ProjectApiKey,

@@ -1,24 +1,31 @@
+import { Injectable } from '@nestjs/common';
 import {
   IWalletProvider,
   WalletOperationPayload,
-} from '../../interface/wallet-provider-base.interface';
-import { WEB2_ENDPOINT_URL } from '../../constant';
-import createAxiosInstance from '../../configs/axios.config';
+} from '../../../interface/wallet-provider-base.interface';
+import { WEB2_ENDPOINT_URL } from '../../../constant';
+import createAxiosInstance from '../../../configs/axios.config';
 
-export class PagaService implements IWalletProvider {
+@Injectable()
+export class FlutterwaveService implements IWalletProvider {
   async createWallet(apiKey: string, payload: WalletOperationPayload) {
     const client = createAxiosInstance(undefined, apiKey);
 
     return client
-      .post(WEB2_ENDPOINT_URL.PAGA.WALLET.CREATE, payload)
+      .post(WEB2_ENDPOINT_URL.FLUTTERWAVE.VIRTUAL_ACCOUNTS.CREATE, payload)
       .then((response) => response.data);
   }
 
   async fetchWallet(apiKey: string, payload: WalletOperationPayload) {
+    const accountReference = payload.accountReference as string | undefined;
+    if (!accountReference) {
+      throw new Error('accountReference is required');
+    }
+
     const client = createAxiosInstance(undefined, apiKey);
 
     return client
-      .post(WEB2_ENDPOINT_URL.PAGA.WALLET.GET, payload)
+      .get(WEB2_ENDPOINT_URL.FLUTTERWAVE.VIRTUAL_ACCOUNTS.GET(accountReference))
       .then((response) => response.data);
   }
 
@@ -26,7 +33,9 @@ export class PagaService implements IWalletProvider {
     const client = createAxiosInstance(undefined, apiKey);
 
     return client
-      .post(WEB2_ENDPOINT_URL.PAGA.WALLET.LIST, payload)
+      .get(WEB2_ENDPOINT_URL.FLUTTERWAVE.VIRTUAL_ACCOUNTS.LIST, {
+        params: payload,
+      })
       .then((response) => response.data);
   }
 
@@ -34,7 +43,11 @@ export class PagaService implements IWalletProvider {
     const client = createAxiosInstance(undefined, apiKey);
 
     return client
-      .post(WEB2_ENDPOINT_URL.PAGA.WALLET.FUND, payload)
+      .post(WEB2_ENDPOINT_URL.FLUTTERWAVE.CHARGES.BASE, payload, {
+        params: {
+          type: 'card',
+        },
+      })
       .then((response) => response.data);
   }
 
@@ -42,7 +55,7 @@ export class PagaService implements IWalletProvider {
     const client = createAxiosInstance(undefined, apiKey);
 
     return client
-      .post(WEB2_ENDPOINT_URL.PAGA.WALLET.WITHDRAW, payload)
+      .post(WEB2_ENDPOINT_URL.FLUTTERWAVE.TRANSFERS.CREATE, payload)
       .then((response) => response.data);
   }
 }

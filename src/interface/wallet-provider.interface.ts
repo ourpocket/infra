@@ -1,4 +1,6 @@
-export type ProviderType = 'paystack' | 'flutterwave' | 'paga' | 'fingra';
+import { PROVIDER_TYPE_ENUM } from '../enums';
+
+export type ProviderType = PROVIDER_TYPE_ENUM;
 
 export interface ProviderConfig {
   apiKey: string;

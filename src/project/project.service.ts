@@ -23,17 +23,7 @@ export class ProjectService {
       throw new NotFoundException('Platform account not found');
     }
 
-    const slug = dto.slug ?? this.slugify(dto.name);
-
-    const existing =
-      await this.projectRepository.findBySlugAndPlatformAccountId(
-        slug,
-        platformAccount.id,
-      );
-
-    if (existing) {
-      throw new ConflictException('Project with this slug already exists');
-    }
+    const slug = await this.resolveProjectSlug(dto, platformAccount.id);
 
     const project = this.projectRepository.create({
       name: dto.name,
@@ -78,5 +68,41 @@ export class ProjectService {
       .trim()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
+  }
+
+  private async resolveProjectSlug(
+    dto: CreateProjectDto,
+    platformAccountId: string,
+  ): Promise<string> {
+    const baseSlug = this.slugify(dto.slug ?? dto.name) || 'project';
+
+    if (dto.slug) {
+      const existing =
+        await this.projectRepository.findBySlugAndPlatformAccountId(
+          baseSlug,
+          platformAccountId,
+        );
+
+      if (existing) {
+        throw new ConflictException('Project with this slug already exists');
+      }
+
+      return baseSlug;
+    }
+
+    let slug = baseSlug;
+    let suffix = 2;
+
+    while (
+      await this.projectRepository.findBySlugAndPlatformAccountId(
+        slug,
+        platformAccountId,
+      )
+    ) {
+      slug = `${baseSlug}-${suffix}`;
+      suffix += 1;
+    }
+
+    return slug;
   }
 }

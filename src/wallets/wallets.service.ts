@@ -3,59 +3,62 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { Wallet } from '../entities/wallet.entity';
-import { ProjectAccount } from '../entities/project-account.entity';
 import { ProjectApiKeyService } from '../project/project-api-key.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { TransferRequestDto } from './dto/transfer.dto';
 import { CreditWalletRequestDto } from './dto/credit-wallet.dto';
 import { DebitWalletRequestDto } from './dto/debit-wallet.dto';
 import { CreateWalletRequestDto } from './dto/create-wallet.dto';
-import { WalletProviderService } from '../wallet-provider/wallet-provider.service';
-import { ProviderType } from '../interface/wallet-provider.interface';
-import { ProjectProviderService } from '../project/project-provider.service';
 import { WalletRepository } from './wallet.repository';
-import { ProjectAccountRepository } from './project-account.repository';
-import { PROVIDER_TYPE_ENUM, ROUTING_STRATEGY_ENUM } from '../enums';
+import { RoutingEngineService } from '../routing/routing-engine.service';
+import { WALLET_ACTION_ENUM } from '../enums';
 
 @Injectable()
 export class WalletsService {
   constructor(
     private readonly walletRepository: WalletRepository,
-    private readonly projectAccountRepository: ProjectAccountRepository,
     private readonly projectApiKeyService: ProjectApiKeyService,
-    private readonly projectProviderService: ProjectProviderService,
-    private readonly walletProviderService: WalletProviderService,
     private readonly ledgerService: LedgerService,
+    private readonly routingEngineService: RoutingEngineService,
   ) {}
 
   async createWallet(
     incomingApiKey: string,
     dto: CreateWalletRequestDto,
-  ): Promise<Wallet> {
+  ): Promise<unknown> {
     const projectApiKey =
       await this.projectApiKeyService.verifyProjectApiKey(incomingApiKey);
 
-    let account: ProjectAccount | null = null;
-    if (dto.accountId) {
-      account =
-        (await this.projectAccountRepository.findByIdAndProjectId(
-          dto.accountId,
-          projectApiKey.project.id,
-        )) ?? null;
-
-      if (!account) {
-        throw new NotFoundException('Project account not found');
-      }
-    }
-
     const wallet = this.walletRepository.create({
       project: projectApiKey.project,
-      account,
-      currency: dto.currency.toUpperCase(),
+      account: null,
+      currency: (dto.currency ?? 'NGN').toUpperCase(),
     });
 
-    return this.walletRepository.save(wallet);
+    const savedWallet = await this.walletRepository.save(wallet);
+    const providerRoute = this.routingEngineService.resolveProviderRoute(dto);
+
+    if (!providerRoute) {
+      return savedWallet;
+    }
+
+    const providerResponse =
+      await this.routingEngineService.executeProviderAction(
+        providerRoute,
+        WALLET_ACTION_ENUM.CREATE_WALLET,
+        {
+          ...(dto.providerPayload ?? {}),
+          userId: dto.userId,
+          walletId: savedWallet.id,
+          currency: savedWallet.currency,
+        },
+      );
+
+    return {
+      wallet: savedWallet,
+      selectedProvider: providerRoute.provider,
+      provider: providerResponse,
+    };
   }
 
   async getWallet(incomingApiKey: string, walletId: string): Promise<unknown> {
@@ -151,14 +154,9 @@ export class WalletsService {
       throw new UnauthorizedException('Wallet currency mismatch');
     }
 
-    const provider = await this.resolveProviderType(
-      projectId,
-      dto.provider,
-      dto.routingStrategy,
-      dto.providerPriority,
-    );
+    const providerRoute = this.routingEngineService.resolveProviderRoute(dto);
 
-    if (!provider) {
+    if (!providerRoute) {
       return this.ledgerService.executeTransaction({
         projectId,
         reference: dto.reference,
@@ -174,32 +172,32 @@ export class WalletsService {
       });
     }
 
-    const providerApiKey =
-      await this.projectProviderService.getProviderApiKeyForProject(
-        projectId,
-        provider,
+    const providerResponse =
+      await this.routingEngineService.executeProviderAction(
+        providerRoute,
+        WALLET_ACTION_ENUM.DEPOSIT,
+        {
+          ...(dto.providerPayload ?? {}),
+          ledger: {
+            projectId,
+            reference: dto.reference,
+            type: 'credit',
+            metadata: dto.metadata,
+            entries: [
+              {
+                walletId: dto.walletId,
+                amount: dto.amount,
+                entryType: 'credit',
+              },
+            ],
+          },
+        },
       );
 
-    return this.walletProviderService.deposit(
-      provider as ProviderType,
-      providerApiKey,
-      {
-        ...(dto.providerPayload ?? {}),
-        ledger: {
-          projectId,
-          reference: dto.reference,
-          type: 'credit',
-          metadata: dto.metadata,
-          entries: [
-            {
-              walletId: dto.walletId,
-              amount: dto.amount,
-              entryType: 'credit',
-            },
-          ],
-        },
-      },
-    );
+    return {
+      selectedProvider: providerRoute.provider,
+      result: providerResponse,
+    };
   }
 
   async debit(
@@ -224,14 +222,9 @@ export class WalletsService {
       throw new UnauthorizedException('Wallet currency mismatch');
     }
 
-    const provider = await this.resolveProviderType(
-      projectId,
-      dto.provider,
-      dto.routingStrategy,
-      dto.providerPriority,
-    );
+    const providerRoute = this.routingEngineService.resolveProviderRoute(dto);
 
-    if (!provider) {
+    if (!providerRoute) {
       return this.ledgerService.executeTransaction({
         projectId,
         reference: dto.reference,
@@ -247,55 +240,31 @@ export class WalletsService {
       });
     }
 
-    const providerApiKey =
-      await this.projectProviderService.getProviderApiKeyForProject(
-        projectId,
-        provider,
-      );
-
-    return this.walletProviderService.withdraw(
-      provider as ProviderType,
-      providerApiKey,
-      {
-        ...(dto.providerPayload ?? {}),
-        ledger: {
-          projectId,
-          reference: dto.reference,
-          type: 'debit',
-          metadata: dto.metadata,
-          entries: [
-            {
-              walletId: dto.walletId,
-              amount: dto.amount,
-              entryType: 'debit',
-            },
-          ],
+    const providerResponse =
+      await this.routingEngineService.executeProviderAction(
+        providerRoute,
+        WALLET_ACTION_ENUM.WITHDRAW,
+        {
+          ...(dto.providerPayload ?? {}),
+          ledger: {
+            projectId,
+            reference: dto.reference,
+            type: 'debit',
+            metadata: dto.metadata,
+            entries: [
+              {
+                walletId: dto.walletId,
+                amount: dto.amount,
+                entryType: 'debit',
+              },
+            ],
+          },
         },
-      },
-    );
-  }
-
-  private async resolveProviderType(
-    projectId: string,
-    provider?: PROVIDER_TYPE_ENUM,
-    strategy?: ROUTING_STRATEGY_ENUM,
-    priority?: PROVIDER_TYPE_ENUM[],
-  ): Promise<PROVIDER_TYPE_ENUM | undefined> {
-    if (provider) {
-      return provider;
-    }
-
-    if (!strategy) {
-      return undefined;
-    }
-
-    const selectedProvider =
-      await this.projectProviderService.selectProviderForProject(
-        projectId,
-        strategy,
-        priority,
       );
 
-    return selectedProvider.type;
+    return {
+      selectedProvider: providerRoute.provider,
+      result: providerResponse,
+    };
   }
 }
