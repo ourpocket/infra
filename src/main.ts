@@ -27,8 +27,16 @@ export async function bootstrap() {
 
   const config = new DocumentBuilder()
     .setTitle('Our Pocket API')
-    .setDescription('Our Pocket API')
+    .setDescription(
+      'Developer-first wallet orchestration API for project API keys, unified wallets, transactions, webhooks, provider rails, and smart routing.',
+    )
     .setVersion('1.0')
+    .addBearerAuth({
+      type: 'http',
+      scheme: 'bearer',
+      bearerFormat: 'Project API Key',
+      description: 'Use an OurPocket project API key such as op_test_sk_xxxxx',
+    })
     .addTag('ourpocket')
     .build();
 

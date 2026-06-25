@@ -1,4 +1,4 @@
-import { MonoService } from '../../../src/services/web2/mono.service';
+import { MonoService } from '../../../src/services/web2';
 
 describe('MonoService', () => {
   let service: MonoService;

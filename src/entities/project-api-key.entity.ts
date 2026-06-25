@@ -44,6 +44,9 @@ export class ProjectApiKey {
   @Column()
   hashedKey!: string;
 
+  @Column({ type: 'text', nullable: true })
+  encryptedKey?: string | null;
+
   @CreateDateColumn()
   createdAt!: Date;
 

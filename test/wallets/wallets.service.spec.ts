@@ -1,10 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { WalletsService } from '../../src/wallets/wallets.service';
 import { WalletRepository } from '../../src/wallets/wallet.repository';
-import { ProjectAccountRepository } from '../../src/wallets/project-account.repository';
 import { ProjectApiKeyService } from '../../src/project/project-api-key.service';
-import { ProjectProviderService } from '../../src/project/project-provider.service';
-import { WalletProviderService } from '../../src/wallet-provider/wallet-provider.service';
 import { LedgerService } from '../../src/ledger/ledger.service';
 import { CreateWalletRequestDto } from '../../src/wallets/dto/create-wallet.dto';
 import { NotFoundException, UnauthorizedException } from '@nestjs/common';
@@ -12,15 +9,14 @@ import { TransferRequestDto } from '../../src/wallets/dto/transfer.dto';
 import { CreditWalletRequestDto } from '../../src/wallets/dto/credit-wallet.dto';
 import { DebitWalletRequestDto } from '../../src/wallets/dto/debit-wallet.dto';
 import { PROVIDER_TYPE_ENUM } from '../../src/enums';
+import { RoutingEngineService } from '../../src/routing/routing-engine.service';
 
 describe('WalletsService', () => {
   let service: WalletsService;
   let walletRepository: any;
-  let projectAccountRepository: any;
   let projectApiKeyService: any;
-  let projectProviderService: any;
-  let walletProviderService: any;
   let ledgerService: any;
+  let routingEngineService: any;
 
   const mockProject = { id: 'project-id' };
   const mockApiKey = 'api-key';
@@ -33,22 +29,16 @@ describe('WalletsService', () => {
       findByIdAndProjectId: jest.fn(),
       findByIdAndProjectIdWithoutRelations: jest.fn(),
     };
-    projectAccountRepository = {
-      findByIdAndProjectId: jest.fn(),
-    };
     projectApiKeyService = {
       verifyProjectApiKey: jest.fn(),
-    };
-    projectProviderService = {
-      getProviderApiKeyForProject: jest.fn(),
-    };
-    walletProviderService = {
-      deposit: jest.fn(),
-      withdraw: jest.fn(),
     };
     ledgerService = {
       getWalletBalance: jest.fn(),
       executeTransaction: jest.fn(),
+    };
+    routingEngineService = {
+      resolveProviderRoute: jest.fn().mockReturnValue(null),
+      executeProviderAction: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -59,24 +49,16 @@ describe('WalletsService', () => {
           useValue: walletRepository,
         },
         {
-          provide: ProjectAccountRepository,
-          useValue: projectAccountRepository,
-        },
-        {
           provide: ProjectApiKeyService,
           useValue: projectApiKeyService,
         },
         {
-          provide: ProjectProviderService,
-          useValue: projectProviderService,
-        },
-        {
-          provide: WalletProviderService,
-          useValue: walletProviderService,
-        },
-        {
           provide: LedgerService,
           useValue: ledgerService,
+        },
+        {
+          provide: RoutingEngineService,
+          useValue: routingEngineService,
         },
       ],
     }).compile();
@@ -114,37 +96,60 @@ describe('WalletsService', () => {
       expect(result).toEqual(newWallet);
     });
 
-    it('should throw NotFoundException if account not found', async () => {
+    it('should route provider wallet creation when credentials are supplied', async () => {
+      const dtoWithProvider: CreateWalletRequestDto = {
+        ...dto,
+        userId: 'user_12345',
+        provider: PROVIDER_TYPE_ENUM.FLUTTERWAVE,
+        providerCredentials: [
+          {
+            provider: PROVIDER_TYPE_ENUM.FLUTTERWAVE,
+            apiKey: 'provider-key',
+          },
+        ],
+        providerPayload: {
+          email: 'sudo.whoami@example.com',
+        },
+      };
+      const newWallet = { id: 'wallet-id', currency: 'USD' };
+      const providerResponse = { status: 'success' };
+
       projectApiKeyService.verifyProjectApiKey.mockResolvedValue(
         mockProjectApiKey,
       );
-      projectAccountRepository.findByIdAndProjectId.mockResolvedValue(null);
-      const dtoWithAccount = { ...dto, accountId: 'acc-id' };
-
-      await expect(
-        service.createWallet(mockApiKey, dtoWithAccount),
-      ).rejects.toThrow(NotFoundException);
-    });
-
-    it('should create wallet with account', async () => {
-      projectApiKeyService.verifyProjectApiKey.mockResolvedValue(
-        mockProjectApiKey,
-      );
-      const account = { id: 'acc-id' };
-      projectAccountRepository.findByIdAndProjectId.mockResolvedValue(account);
-      const dtoWithAccount = { ...dto, accountId: 'acc-id' };
-      const newWallet = { id: 'wallet-id', ...dtoWithAccount };
-
       walletRepository.create.mockReturnValue(newWallet);
       walletRepository.save.mockResolvedValue(newWallet);
-
-      const result = await service.createWallet(mockApiKey, dtoWithAccount);
-      expect(walletRepository.create).toHaveBeenCalledWith({
-        project: mockProject,
-        account,
-        currency: 'USD',
+      routingEngineService.resolveProviderRoute.mockReturnValue({
+        provider: PROVIDER_TYPE_ENUM.FLUTTERWAVE,
+        apiKey: 'provider-key',
       });
-      expect(result).toEqual(newWallet);
+      routingEngineService.executeProviderAction.mockResolvedValue(
+        providerResponse,
+      );
+
+      const result = await service.createWallet(mockApiKey, dtoWithProvider);
+
+      expect(routingEngineService.resolveProviderRoute).toHaveBeenCalledWith(
+        dtoWithProvider,
+      );
+      expect(routingEngineService.executeProviderAction).toHaveBeenCalledWith(
+        {
+          provider: PROVIDER_TYPE_ENUM.FLUTTERWAVE,
+          apiKey: 'provider-key',
+        },
+        'create_wallet',
+        {
+          email: 'sudo.whoami@example.com',
+          userId: 'user_12345',
+          walletId: 'wallet-id',
+          currency: 'USD',
+        },
+      );
+      expect(result).toEqual({
+        wallet: newWallet,
+        selectedProvider: PROVIDER_TYPE_ENUM.FLUTTERWAVE,
+        provider: providerResponse,
+      });
     });
   });
 
@@ -323,6 +328,7 @@ describe('WalletsService', () => {
       const dtoWithProvider: CreditWalletRequestDto = {
         ...dto,
         provider: PROVIDER_TYPE_ENUM.PAYSTACK,
+        apiKey: 'provider-key',
       };
       projectApiKeyService.verifyProjectApiKey.mockResolvedValue(
         mockProjectApiKey,
@@ -331,20 +337,24 @@ describe('WalletsService', () => {
         id: 'w1',
         currency: 'USD',
       });
-      projectProviderService.getProviderApiKeyForProject.mockResolvedValue(
-        'provider-key',
-      );
+      routingEngineService.resolveProviderRoute.mockReturnValue({
+        provider: PROVIDER_TYPE_ENUM.PAYSTACK,
+        apiKey: 'provider-key',
+      });
       const transaction = { id: 'tx-1' };
-      walletProviderService.deposit.mockResolvedValue(transaction);
+      routingEngineService.executeProviderAction.mockResolvedValue(transaction);
 
       const result = await service.credit(mockApiKey, dtoWithProvider);
 
-      expect(
-        projectProviderService.getProviderApiKeyForProject,
-      ).toHaveBeenCalledWith(mockProject.id, PROVIDER_TYPE_ENUM.PAYSTACK);
-      expect(walletProviderService.deposit).toHaveBeenCalledWith(
-        PROVIDER_TYPE_ENUM.PAYSTACK,
-        'provider-key',
+      expect(routingEngineService.resolveProviderRoute).toHaveBeenCalledWith(
+        dtoWithProvider,
+      );
+      expect(routingEngineService.executeProviderAction).toHaveBeenCalledWith(
+        {
+          provider: PROVIDER_TYPE_ENUM.PAYSTACK,
+          apiKey: 'provider-key',
+        },
+        'deposit',
         expect.objectContaining({
           ledger: expect.objectContaining({
             projectId: mockProject.id,
@@ -352,7 +362,10 @@ describe('WalletsService', () => {
           }),
         }),
       );
-      expect(result).toBe(transaction);
+      expect(result).toEqual({
+        selectedProvider: PROVIDER_TYPE_ENUM.PAYSTACK,
+        result: transaction,
+      });
     });
   });
 
@@ -420,6 +433,7 @@ describe('WalletsService', () => {
       const dtoWithProvider: DebitWalletRequestDto = {
         ...dto,
         provider: PROVIDER_TYPE_ENUM.PAYSTACK,
+        apiKey: 'provider-key',
       };
       projectApiKeyService.verifyProjectApiKey.mockResolvedValue(
         mockProjectApiKey,
@@ -428,17 +442,21 @@ describe('WalletsService', () => {
         id: 'w1',
         currency: 'USD',
       });
-      projectProviderService.getProviderApiKeyForProject.mockResolvedValue(
-        'provider-key',
-      );
+      routingEngineService.resolveProviderRoute.mockReturnValue({
+        provider: PROVIDER_TYPE_ENUM.PAYSTACK,
+        apiKey: 'provider-key',
+      });
       const transaction = { id: 'tx-1' };
-      walletProviderService.withdraw.mockResolvedValue(transaction);
+      routingEngineService.executeProviderAction.mockResolvedValue(transaction);
 
       const result = await service.debit(mockApiKey, dtoWithProvider);
 
-      expect(walletProviderService.withdraw).toHaveBeenCalledWith(
-        PROVIDER_TYPE_ENUM.PAYSTACK,
-        'provider-key',
+      expect(routingEngineService.executeProviderAction).toHaveBeenCalledWith(
+        {
+          provider: PROVIDER_TYPE_ENUM.PAYSTACK,
+          apiKey: 'provider-key',
+        },
+        'withdraw',
         expect.objectContaining({
           ledger: expect.objectContaining({
             projectId: mockProject.id,
@@ -446,7 +464,13 @@ describe('WalletsService', () => {
           }),
         }),
       );
-      expect(result).toBe(transaction);
+      expect(routingEngineService.resolveProviderRoute).toHaveBeenCalledWith(
+        dtoWithProvider,
+      );
+      expect(result).toEqual({
+        selectedProvider: PROVIDER_TYPE_ENUM.PAYSTACK,
+        result: transaction,
+      });
     });
   });
 });

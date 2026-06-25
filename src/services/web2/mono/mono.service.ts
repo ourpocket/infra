@@ -1,8 +1,10 @@
+import { Injectable } from '@nestjs/common';
 import {
   IWalletProvider,
   WalletOperationPayload,
-} from '../../interface/wallet-provider-base.interface';
+} from '../../../interface/wallet-provider-base.interface';
 
+@Injectable()
 export class MonoService implements IWalletProvider {
   async createWallet(
     apiKey: string,

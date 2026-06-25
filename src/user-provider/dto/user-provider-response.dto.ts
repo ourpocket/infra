@@ -1,13 +1,50 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { UserProvider } from '../../entities/user-provider.entity';
 import { PROVIDER_TYPE_ENUM } from '../../enums';
 
 export class UserProviderResponseDto {
+  @ApiProperty({
+    description: 'User provider id',
+    example: '34c061c2-82e8-4f28-96f4-fbb350e82f70',
+  })
   id!: string;
+
+  @ApiProperty({
+    description: 'Provider rail',
+    enum: PROVIDER_TYPE_ENUM,
+    example: PROVIDER_TYPE_ENUM.PAYSTACK,
+  })
   type!: PROVIDER_TYPE_ENUM;
+
+  @ApiProperty({
+    description: 'Display name',
+    example: 'Paystack production',
+  })
   name!: string;
+
+  @ApiProperty({
+    description: 'Sanitized provider configuration',
+    example: { apiKey: 'sk***es', businessId: 'bu***45' },
+    nullable: true,
+  })
   config!: Record<string, any> | null;
+
+  @ApiProperty({
+    description: 'Whether this provider is active',
+    example: true,
+  })
   isActive!: boolean;
+
+  @ApiProperty({
+    description: 'Creation timestamp',
+    example: '2026-06-25T00:00:00.000Z',
+  })
   createdAt!: Date;
+
+  @ApiProperty({
+    description: 'Last update timestamp',
+    example: '2026-06-25T00:00:00.000Z',
+  })
   updatedAt!: Date;
 
   static fromEntity(entity: UserProvider): UserProviderResponseDto {

@@ -10,7 +10,8 @@ export class CreateProjectDto {
   name!: string;
 
   @ApiPropertyOptional({
-    description: 'URL friendly project slug, unique per platform account',
+    description:
+      'Optional URL friendly project slug. When omitted, the backend generates one from the project name.',
     example: 'production-wallets',
   })
   @IsOptional()

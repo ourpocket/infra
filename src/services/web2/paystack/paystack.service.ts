@@ -1,29 +1,31 @@
+import { Injectable } from '@nestjs/common';
 import {
   IWalletProvider,
   WalletOperationPayload,
-} from '../../interface/wallet-provider-base.interface';
-import { WEB2_ENDPOINT_URL } from '../../constant';
-import createAxiosInstance from '../../configs/axios.config';
+} from '../../../interface/wallet-provider-base.interface';
+import { WEB2_ENDPOINT_URL } from '../../../constant';
+import createAxiosInstance from '../../../configs/axios.config';
 
-export class FlutterwaveService implements IWalletProvider {
+@Injectable()
+export class PaystackService implements IWalletProvider {
   async createWallet(apiKey: string, payload: WalletOperationPayload) {
     const client = createAxiosInstance(undefined, apiKey);
 
     return client
-      .post(WEB2_ENDPOINT_URL.FLUTTERWAVE.VIRTUAL_ACCOUNTS.CREATE, payload)
+      .post(WEB2_ENDPOINT_URL.PAYSTACK.CUSTOMER.CREATE, payload)
       .then((response) => response.data);
   }
 
   async fetchWallet(apiKey: string, payload: WalletOperationPayload) {
-    const accountReference = payload.accountReference as string | undefined;
-    if (!accountReference) {
-      throw new Error('accountReference is required');
+    const customerCode = payload.customerCode as string | undefined;
+    if (!customerCode) {
+      throw new Error('customerCode is required');
     }
 
     const client = createAxiosInstance(undefined, apiKey);
 
     return client
-      .get(WEB2_ENDPOINT_URL.FLUTTERWAVE.VIRTUAL_ACCOUNTS.GET(accountReference))
+      .get(WEB2_ENDPOINT_URL.PAYSTACK.CUSTOMER.GET(customerCode))
       .then((response) => response.data);
   }
 
@@ -31,7 +33,7 @@ export class FlutterwaveService implements IWalletProvider {
     const client = createAxiosInstance(undefined, apiKey);
 
     return client
-      .get(WEB2_ENDPOINT_URL.FLUTTERWAVE.VIRTUAL_ACCOUNTS.LIST, {
+      .get(WEB2_ENDPOINT_URL.PAYSTACK.CUSTOMER.LIST, {
         params: payload,
       })
       .then((response) => response.data);
@@ -41,11 +43,7 @@ export class FlutterwaveService implements IWalletProvider {
     const client = createAxiosInstance(undefined, apiKey);
 
     return client
-      .post(WEB2_ENDPOINT_URL.FLUTTERWAVE.CHARGES.BASE, payload, {
-        params: {
-          type: 'card',
-        },
-      })
+      .post(WEB2_ENDPOINT_URL.PAYSTACK.TRANSACTION.INITIALIZE, payload)
       .then((response) => response.data);
   }
 
@@ -53,7 +51,7 @@ export class FlutterwaveService implements IWalletProvider {
     const client = createAxiosInstance(undefined, apiKey);
 
     return client
-      .post(WEB2_ENDPOINT_URL.FLUTTERWAVE.TRANSFERS.CREATE, payload)
+      .post(WEB2_ENDPOINT_URL.PAYSTACK.TRANSFER.CREATE, payload)
       .then((response) => response.data);
   }
 }

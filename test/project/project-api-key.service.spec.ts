@@ -104,7 +104,11 @@ describe('ProjectApiKeyService', () => {
         expiresAt: undefined,
         createdAt: savedApiKey.createdAt,
       });
-      expect(projectApiKeyRepository.create).toHaveBeenCalled();
+      expect(projectApiKeyRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          encryptedKey: expect.any(String),
+        }),
+      );
       expect(projectApiKeyRepository.save).toHaveBeenCalled();
     });
   });
@@ -196,8 +200,8 @@ describe('ProjectApiKeyService', () => {
     it('should return list of keys without hashedKey', async () => {
       projectRepository.findByIdAndUserId.mockResolvedValue({ id: projectId });
       const apiKeys = [
-        { id: 'key-1', hashedKey: 'hash-1', scope: 'read' },
-        { id: 'key-2', hashedKey: 'hash-2', scope: 'write' },
+        { id: 'key-1', hashedKey: 'hash-1', scope: 'test' },
+        { id: 'key-2', hashedKey: 'hash-2', scope: 'live' },
       ];
       projectApiKeyRepository.findAllByProjectId.mockResolvedValue(apiKeys);
 
@@ -207,6 +211,7 @@ describe('ProjectApiKeyService', () => {
       expect(result[0]).not.toHaveProperty('hashedKey');
       expect(result[1]).not.toHaveProperty('hashedKey');
       expect(result[0]).toHaveProperty('id', 'key-1');
+      expect(result[0]).toHaveProperty('keyPreview', 'op_test_sk_********');
     });
   });
 });

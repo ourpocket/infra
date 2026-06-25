@@ -1,4 +1,4 @@
-import { FingraService } from '../../../src/services/web2/fingra.service';
+import { FingraService } from '../../../src/services/web2';
 import { WEB2_ENDPOINT_URL } from '../../../src/constant';
 import createAxiosInstance from '../../../src/configs/axios.config';
 

@@ -13,14 +13,14 @@ import { AUTH_TYPE_ENUM } from '../../enums';
 export class CreateAccountDto {
   @ApiProperty({
     description: 'Full name of the user or developer',
-    example: 'Jane Doe',
+    example: 'sudo whoami',
   })
   @IsString()
   name!: string;
 
   @ApiProperty({
     description: 'Valid email address of the user',
-    example: 'jane.doe@example.com',
+    example: 'sudo.whoami@example.com',
   })
   @IsEmail()
   email!: string;
@@ -87,14 +87,14 @@ export class CreateAccountDto {
 export class CreateAccountLocalDto {
   @ApiProperty({
     description: 'Full name of the user or developer',
-    example: 'Jane Doe',
+    example: 'sudo whoami',
   })
   @IsString()
   name!: string;
 
   @ApiProperty({
     description: 'Valid email address of the user',
-    example: 'jane.doe@example.com',
+    example: 'sudo.whoami@example.com',
   })
   @IsEmail()
   email!: string;
@@ -158,14 +158,14 @@ export class CreateAccountLocalDto {
 export class CreateAccountGoogleDto {
   @ApiProperty({
     description: 'Full name of the user or developer',
-    example: 'Jane Doe',
+    example: 'sudo whoami',
   })
   @IsString()
   name!: string;
 
   @ApiProperty({
     description: 'Valid email address of the user',
-    example: 'jane.doe@example.com',
+    example: 'sudo.whoami@example.com',
   })
   @IsEmail()
   email!: string;

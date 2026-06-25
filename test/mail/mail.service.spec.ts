@@ -118,7 +118,7 @@ describe('MailService', () => {
   describe('sendWelcomeEmail', () => {
     it('should send welcome email', async () => {
       mockSend.mockResolvedValue({ data: { id: 'email-id' }, error: null });
-      await service.sendWelcomeEmail('test@example.com', 'John');
+      await service.sendWelcomeEmail('test@example.com', 'sudo whoami');
 
       expect(mockSend).toHaveBeenCalledWith(
         expect.objectContaining({

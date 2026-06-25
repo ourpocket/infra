@@ -1,29 +1,31 @@
+import { Injectable } from '@nestjs/common';
 import {
   IWalletProvider,
   WalletOperationPayload,
-} from '../../interface/wallet-provider-base.interface';
-import { WEB2_ENDPOINT_URL } from '../../constant';
-import createAxiosInstance from '../../configs/axios.config';
+} from '../../../interface/wallet-provider-base.interface';
+import { WEB2_ENDPOINT_URL } from '../../../constant';
+import createAxiosInstance from '../../../configs/axios.config';
 
-export class PaystackService implements IWalletProvider {
+@Injectable()
+export class FingraService implements IWalletProvider {
   async createWallet(apiKey: string, payload: WalletOperationPayload) {
     const client = createAxiosInstance(undefined, apiKey);
 
     return client
-      .post(WEB2_ENDPOINT_URL.PAYSTACK.CUSTOMER.CREATE, payload)
+      .post(WEB2_ENDPOINT_URL.FINGRA.WALLETS.CREATE, payload)
       .then((response) => response.data);
   }
 
   async fetchWallet(apiKey: string, payload: WalletOperationPayload) {
-    const customerCode = payload.customerCode as string | undefined;
-    if (!customerCode) {
-      throw new Error('customerCode is required');
+    const walletId = payload.walletId as string | undefined;
+    if (!walletId) {
+      throw new Error('walletId is required');
     }
 
     const client = createAxiosInstance(undefined, apiKey);
 
     return client
-      .get(WEB2_ENDPOINT_URL.PAYSTACK.CUSTOMER.GET(customerCode))
+      .get(WEB2_ENDPOINT_URL.FINGRA.WALLETS.GET(walletId))
       .then((response) => response.data);
   }
 
@@ -31,7 +33,7 @@ export class PaystackService implements IWalletProvider {
     const client = createAxiosInstance(undefined, apiKey);
 
     return client
-      .get(WEB2_ENDPOINT_URL.PAYSTACK.CUSTOMER.LIST, {
+      .get(WEB2_ENDPOINT_URL.FINGRA.WALLETS.LIST, {
         params: payload,
       })
       .then((response) => response.data);
@@ -41,7 +43,7 @@ export class PaystackService implements IWalletProvider {
     const client = createAxiosInstance(undefined, apiKey);
 
     return client
-      .post(WEB2_ENDPOINT_URL.PAYSTACK.TRANSACTION.INITIALIZE, payload)
+      .post(WEB2_ENDPOINT_URL.FINGRA.WALLETS.DEPOSIT, payload)
       .then((response) => response.data);
   }
 
@@ -49,7 +51,7 @@ export class PaystackService implements IWalletProvider {
     const client = createAxiosInstance(undefined, apiKey);
 
     return client
-      .post(WEB2_ENDPOINT_URL.PAYSTACK.TRANSFER.CREATE, payload)
+      .post(WEB2_ENDPOINT_URL.FINGRA.WALLETS.WITHDRAW, payload)
       .then((response) => response.data);
   }
 }

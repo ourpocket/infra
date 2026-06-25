@@ -1,4 +1,4 @@
-import { BaseWeb3Service } from '../../../src/services/web3/base-web3.service';
+import { BaseWeb3Service } from '../../../src/services/web3';
 import { Web3OperationPayload } from '../../../src/interface/web3-provider-base.interface';
 
 class MockWeb3Service extends BaseWeb3Service {

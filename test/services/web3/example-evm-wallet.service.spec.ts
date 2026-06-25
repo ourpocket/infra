@@ -1,4 +1,4 @@
-import { ExampleEvmWalletService } from '../../../src/services/web3/example-evm-wallet.service';
+import { ExampleEvmWalletService } from '../../../src/services/web3';
 
 describe('ExampleEvmWalletService', () => {
   let service: ExampleEvmWalletService;

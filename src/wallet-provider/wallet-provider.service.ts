@@ -1,65 +1,51 @@
-import { Injectable, Optional } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 
 import {
   ProviderType,
   ProviderConfig,
   WalletProvider,
 } from '../interface/wallet-provider.interface';
-import {
-  IWalletProvider,
-  WalletOperationPayload,
-} from '../interface/wallet-provider-base.interface';
-import { PaystackService } from '../services/web2/paystack.service';
-import { FlutterwaveService } from '../services/web2/flutterwave.service';
-import { PagaService } from '../services/web2/paga.service';
-import { FingraService } from '../services/web2/fingra.service';
-import { LedgerService } from '../ledger/ledger.service';
-import { RetryEngineService } from '../retry/retry-engine.service';
+import { WalletOperationPayload } from '../interface/wallet-provider-base.interface';
+import { RoutingEngineService } from '../routing/routing-engine.service';
+import { PROVIDER_TYPE_ENUM, WALLET_ACTION_ENUM } from '../enums';
 
 @Injectable()
 export class WalletProviderService {
-  constructor(
-    private readonly ledgerService: LedgerService,
-    @Optional()
-    private readonly retryEngineService?: RetryEngineService,
-  ) {}
+  constructor(private readonly routingEngineService: RoutingEngineService) {}
+
+  private readonly supportedProviderTypes: ProviderType[] = [
+    PROVIDER_TYPE_ENUM.PAYSTACK,
+    PROVIDER_TYPE_ENUM.FLUTTERWAVE,
+  ];
 
   private providers: WalletProvider[] = [
     {
-      type: 'paystack',
+      type: PROVIDER_TYPE_ENUM.PAYSTACK,
       name: 'Paystack',
       isActive: true,
       config: { apiKey: process.env.PAYSTACK_API_KEY || '' },
     },
     {
-      type: 'flutterwave',
+      type: PROVIDER_TYPE_ENUM.FLUTTERWAVE,
       name: 'Flutterwave',
       isActive: true,
       config: { apiKey: process.env.FLUTTERWAVE_API_KEY || '' },
     },
-    {
-      type: 'paga',
-      name: 'Paga',
-      isActive: true,
-      config: { apiKey: process.env.PAGA_API_KEY || '' },
-    },
-    {
-      type: 'fingra',
-      name: 'Fingra',
-      isActive: true,
-      config: { apiKey: process.env.FINGRA_API_KEY || '' },
-    },
   ];
 
   getAvailableProviders(): WalletProvider[] {
-    return this.providers.filter((p) => p.isActive);
+    return this.providers.filter(
+      (p) => p.isActive && this.supportedProviderTypes.includes(p.type),
+    );
   }
 
   getProvider(type: ProviderType): WalletProvider | undefined {
+    this.assertSupportedProvider(type);
     return this.providers.find((p) => p.type === type && p.isActive);
   }
 
   addProvider(type: ProviderType, config: ProviderConfig): WalletProvider {
+    this.assertSupportedProvider(type);
     const existing = this.providers.find((p) => p.type === type);
     if (existing) {
       existing.isActive = true;
@@ -77,26 +63,20 @@ export class WalletProviderService {
   }
 
   removeProvider(type: ProviderType): void {
+    this.assertSupportedProvider(type);
     const provider = this.providers.find((p) => p.type === type);
     if (provider) provider.isActive = false;
   }
-
-  private providerRegistry: Record<ProviderType, IWalletProvider> = {
-    paystack: new PaystackService(),
-    flutterwave: new FlutterwaveService(),
-    paga: new PagaService(),
-    fingra: new FingraService(),
-  };
 
   async createWallet(
     provider: ProviderType,
     apiKey: string,
     payload: WalletOperationPayload,
   ): Promise<unknown> {
-    const providerInstance = this.providerRegistry[provider];
-    if (!providerInstance) throw new Error('Unsupported provider');
-    return this.executeProviderCall(() =>
-      providerInstance.createWallet(apiKey, payload),
+    return this.routingEngineService.executeProviderAction(
+      { provider, apiKey },
+      WALLET_ACTION_ENUM.CREATE_WALLET,
+      payload,
     );
   }
 
@@ -105,10 +85,10 @@ export class WalletProviderService {
     apiKey: string,
     payload: WalletOperationPayload,
   ): Promise<unknown> {
-    const providerInstance = this.providerRegistry[provider];
-    if (!providerInstance) throw new Error('Unsupported provider');
-    return this.executeProviderCall(() =>
-      providerInstance.fetchWallet(apiKey, payload),
+    return this.routingEngineService.executeProviderAction(
+      { provider, apiKey },
+      WALLET_ACTION_ENUM.FETCH_WALLET,
+      payload,
     );
   }
 
@@ -117,10 +97,10 @@ export class WalletProviderService {
     apiKey: string,
     payload: WalletOperationPayload,
   ): Promise<unknown> {
-    const providerInstance = this.providerRegistry[provider];
-    if (!providerInstance) throw new Error('Unsupported provider');
-    return this.executeProviderCall(() =>
-      providerInstance.listWallets(apiKey, payload),
+    return this.routingEngineService.executeProviderAction(
+      { provider, apiKey },
+      WALLET_ACTION_ENUM.LIST_WALLETS,
+      payload,
     );
   }
 
@@ -129,23 +109,11 @@ export class WalletProviderService {
     apiKey: string,
     payload: WalletOperationPayload,
   ): Promise<unknown> {
-    const providerInstance = this.providerRegistry[provider];
-    if (!providerInstance) throw new Error('Unsupported provider');
-    const { ledger, ...providerPayload } = payload;
-    const providerResponse = await this.executeProviderCall(() =>
-      providerInstance.deposit(apiKey, providerPayload),
+    return this.routingEngineService.executeProviderAction(
+      { provider, apiKey },
+      WALLET_ACTION_ENUM.DEPOSIT,
+      payload,
     );
-
-    if (!ledger) {
-      return providerResponse;
-    }
-
-    const ledgerResponse = await this.ledgerService.executeTransaction(ledger);
-
-    return {
-      provider: providerResponse,
-      ledger: ledgerResponse,
-    };
   }
 
   async withdraw(
@@ -153,30 +121,16 @@ export class WalletProviderService {
     apiKey: string,
     payload: WalletOperationPayload,
   ): Promise<unknown> {
-    const providerInstance = this.providerRegistry[provider];
-    if (!providerInstance) throw new Error('Unsupported provider');
-    const { ledger, ...providerPayload } = payload;
-    const providerResponse = await this.executeProviderCall(() =>
-      providerInstance.withdraw(apiKey, providerPayload),
+    return this.routingEngineService.executeProviderAction(
+      { provider, apiKey },
+      WALLET_ACTION_ENUM.WITHDRAW,
+      payload,
     );
-
-    if (!ledger) {
-      return providerResponse;
-    }
-
-    const ledgerResponse = await this.ledgerService.executeTransaction(ledger);
-
-    return {
-      provider: providerResponse,
-      ledger: ledgerResponse,
-    };
   }
 
-  private executeProviderCall<T>(operation: () => Promise<T>): Promise<T> {
-    if (this.retryEngineService) {
-      return this.retryEngineService.execute(operation);
+  private assertSupportedProvider(provider: ProviderType): void {
+    if (!this.supportedProviderTypes.includes(provider)) {
+      throw new BadRequestException(`${provider} is not supported yet`);
     }
-
-    return operation();
   }
 }
