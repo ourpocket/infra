@@ -21,6 +21,7 @@ import { WalletsModule } from './wallets/wallets.module';
 import { TransactionsModule } from './transactions/transactions.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { UsageModule } from './usage/usage.module';
+import { ProviderCatalogModule } from './provider-catalog/provider-catalog.module';
 
 const TypeORMConfigModule = TypeOrmModule.forRootAsync({
   imports: [NestConfigModule],
@@ -43,6 +44,7 @@ const TypeORMConfigModule = TypeOrmModule.forRootAsync({
     TransactionsModule,
     WebhooksModule,
     UsageModule,
+    ProviderCatalogModule,
     ThrottlerModule.forRoot({
       throttlers: [
         {

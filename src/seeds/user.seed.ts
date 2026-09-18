@@ -48,6 +48,7 @@ async function seedUser() {
       passwordHash: passwordHash,
       provider: AUTH_TYPE_ENUM.LOCAL,
       status: USERS_STATUS_ENUM.ACTIVE,
+      isPlatformAdmin: userData.name === 'Admin User',
       isEmailVerified: true,
       acceptTerms: true,
     });

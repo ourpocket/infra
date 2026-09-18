@@ -9,6 +9,8 @@ import { PROVIDER_TYPE_ENUM, ROUTING_STRATEGY_ENUM } from '../enums';
 import { ConfigureProjectProviderDto } from './dto/configure-project-provider.dto';
 import { ProjectProviderRepository } from './project-provider.repository';
 import { ProjectRepository } from './project.repository';
+import { ProviderCatalogService } from '../provider-catalog/provider-catalog.service';
+import { ConnectProjectProviderDto } from './dto/connect-project-provider.dto';
 
 interface EncryptedProviderConfig {
   encrypted: true;
@@ -22,7 +24,56 @@ export class ProjectProviderService {
   constructor(
     private readonly projectProviderRepository: ProjectProviderRepository,
     private readonly projectRepository: ProjectRepository,
+    private readonly providerCatalogService: ProviderCatalogService,
   ) {}
+
+  async connectProvider(
+    userId: string,
+    projectId: string,
+    dto: ConnectProjectProviderDto,
+  ): Promise<ProjectProvider> {
+    const project = await this.projectRepository.findByIdAndUserId(
+      projectId,
+      userId,
+    );
+
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
+
+    const catalogProvider = await this.providerCatalogService.findConnectable(
+      dto.providerId,
+    );
+    this.assertRequiredConnectionFields(
+      catalogProvider.credentialFields,
+      dto.config,
+    );
+
+    const existing =
+      await this.projectProviderRepository.findByProjectIdAndProviderId(
+        projectId,
+        catalogProvider.id,
+      );
+
+    if (existing) {
+      existing.config = this.encryptConfig(dto.config);
+      existing.isActive = dto.isActive ?? true;
+      const saved = await this.projectProviderRepository.save(existing);
+      return this.sanitizeProvider(saved);
+    }
+
+    const provider = this.projectProviderRepository.create({
+      project,
+      provider: catalogProvider,
+      providerCatalogId: catalogProvider.id,
+      type: catalogProvider.adapterType,
+      config: this.encryptConfig(dto.config),
+      isActive: dto.isActive ?? true,
+    });
+
+    const saved = await this.projectProviderRepository.save(provider);
+    return this.sanitizeProvider(saved);
+  }
 
   async configureProvider(
     userId: string,
@@ -225,6 +276,22 @@ export class ProjectProviderService {
       ...provider,
       config: this.maskConfig(this.decryptConfig(provider.config)),
     };
+  }
+
+  private assertRequiredConnectionFields(
+    fields: Array<{ key: string; required: boolean }>,
+    config: Record<string, unknown>,
+  ): void {
+    for (const field of fields) {
+      if (!field.required) {
+        continue;
+      }
+
+      const value = config[field.key];
+      if (typeof value !== 'string' || !value.trim()) {
+        throw new UnauthorizedException(`${field.key} is required`);
+      }
+    }
   }
 
   private maskConfig(config: Record<string, any>): Record<string, any> {

@@ -20,6 +20,27 @@ enum PROVIDER_TYPE_ENUM {
   FINGRA = 'fingra',
 }
 
+enum PROVIDER_CATALOG_STATUS_ENUM {
+  DRAFT = 'draft',
+  COMING_SOON = 'coming_soon',
+  ACTIVE = 'active',
+  MAINTENANCE = 'maintenance',
+  RETIRED = 'retired',
+}
+
+enum PROVIDER_CATEGORY_ENUM {
+  AFRICA = 'africa',
+  GLOBAL = 'global',
+  DATA_VERIFICATION = 'data_verification',
+}
+
+enum PROVIDER_CAPABILITY_ENUM {
+  WALLET_OPERATIONS = 'wallet_operations',
+  PAYMENT_COLLECTION = 'payment_collection',
+  BANK_DATA = 'bank_data',
+  IDENTITY_VERIFICATION = 'identity_verification',
+}
+
 enum PROJECT_API_KEY_SCOPE_ENUM {
   TEST = 'test',
   LIVE = 'live',
@@ -85,6 +106,9 @@ export {
   API_ENVIROMENT,
   USERS_STATUS_ENUM,
   PROVIDER_TYPE_ENUM,
+  PROVIDER_CATALOG_STATUS_ENUM,
+  PROVIDER_CATEGORY_ENUM,
+  PROVIDER_CAPABILITY_ENUM,
   PROJECT_API_KEY_SCOPE_ENUM,
   ROUTING_STRATEGY_ENUM,
   WALLET_ACTION_ENUM,

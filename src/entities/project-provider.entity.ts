@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import { Project } from './project.entity';
 import { PROVIDER_TYPE_ENUM } from '../enums';
+import { ProviderCatalog } from './provider-catalog.entity';
 
 @Entity({ name: 'project_providers' })
 export class ProjectProvider {
@@ -28,6 +29,16 @@ export class ProjectProvider {
     enum: PROVIDER_TYPE_ENUM,
   })
   type!: PROVIDER_TYPE_ENUM;
+
+  @Column({ type: 'uuid', name: 'provider_catalog_id', nullable: true })
+  providerCatalogId?: string | null;
+
+  @ManyToOne(() => ProviderCatalog, (provider) => provider.projectProviders, {
+    onDelete: 'RESTRICT',
+    nullable: true,
+  })
+  @JoinColumn({ name: 'provider_catalog_id' })
+  provider?: Relation<ProviderCatalog> | null;
 
   @Column({ type: 'jsonb', nullable: true })
   config!: Record<string, any>;

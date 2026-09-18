@@ -10,6 +10,7 @@ import { UserStatusGuard } from '../auth/guards/user-status.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ProjectProviderService } from './project-provider.service';
 import { ConfigureProjectProviderDto } from './dto/configure-project-provider.dto';
+import { ConnectProjectProviderDto } from './dto/connect-project-provider.dto';
 
 @ApiTags('Project Providers')
 @ApiBearerAuth()
@@ -38,6 +39,18 @@ export class ProjectProviderController {
       projectId,
       dto,
     );
+  }
+
+  @Post('connect')
+  @ApiOperation({
+    summary: 'Connect a catalog provider to a project',
+  })
+  connectProvider(
+    @CurrentUser('userId') userId: string,
+    @Param('projectId') projectId: string,
+    @Body() dto: ConnectProjectProviderDto,
+  ) {
+    return this.projectProviderService.connectProvider(userId, projectId, dto);
   }
 
   @Get()

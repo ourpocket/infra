@@ -49,6 +49,9 @@ export class User {
   @Column({ type: 'varchar', length: 30, nullable: true })
   role?: string | null;
 
+  @Column({ type: 'boolean', default: false })
+  isPlatformAdmin!: boolean;
+
   @Column({ type: 'varchar', length: 255, nullable: true })
   passwordResetToken?: string | null;
 

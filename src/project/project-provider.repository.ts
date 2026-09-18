@@ -20,9 +20,24 @@ export class ProjectProviderRepository extends Repository<ProjectProvider> {
       .getOne();
   }
 
+  async findByProjectIdAndProviderId(
+    projectId: string,
+    providerId: string,
+  ): Promise<ProjectProvider | null> {
+    return this.createQueryBuilder('projectProvider')
+      .leftJoinAndSelect('projectProvider.project', 'project')
+      .leftJoinAndSelect('projectProvider.provider', 'provider')
+      .where('project.id = :projectId', { projectId })
+      .andWhere('projectProvider.providerCatalogId = :providerId', {
+        providerId,
+      })
+      .getOne();
+  }
+
   async findAllByProjectId(projectId: string): Promise<ProjectProvider[]> {
     return this.createQueryBuilder('projectProvider')
       .leftJoin('projectProvider.project', 'project')
+      .leftJoinAndSelect('projectProvider.provider', 'provider')
       .where('project.id = :projectId', { projectId })
       .orderBy('projectProvider.createdAt', 'DESC')
       .getMany();
