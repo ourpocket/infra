@@ -89,7 +89,7 @@ describe('AuthController', () => {
   describe('forgottenPassword', () => {
     it('should call authService.forgottenPassword', async () => {
       const email = 'test@example.com';
-      await controller.forgottenPassword(email);
+      await controller.forgottenPassword({ email });
       expect(authService.forgottenPassword).toHaveBeenCalledWith(email);
     });
   });
@@ -97,7 +97,7 @@ describe('AuthController', () => {
   describe('requestVerificationEmail', () => {
     it('should call authService.requestVerificationEmail', async () => {
       const email = 'test@example.com';
-      await controller.requestVerificationEmail(email);
+      await controller.requestVerificationEmail({ email });
       expect(authService.requestVerificationEmail).toHaveBeenCalledWith(email);
     });
   });

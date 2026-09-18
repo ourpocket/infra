@@ -1,12 +1,15 @@
 import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { JwtAuthGuard } from '../../../src/auth/guards/jwt-auth.guard';
 
 describe('JwtAuthGuard', () => {
   let guard: JwtAuthGuard;
 
   beforeEach(() => {
-    guard = new JwtAuthGuard();
+    guard = new JwtAuthGuard(
+      new ConfigService({ jwt: { secret: 'ourpocket-development-secret' } }),
+    );
   });
 
   it('should be defined', () => {

@@ -18,6 +18,7 @@ jest.mock('@nestjs/swagger', () => {
     setTitle: jest.fn().mockReturnThis(),
     setDescription: jest.fn().mockReturnThis(),
     setVersion: jest.fn().mockReturnThis(),
+    addBearerAuth: jest.fn().mockReturnThis(),
     addTag: jest.fn().mockReturnThis(),
     build: jest.fn().mockReturnValue({}),
   };
