@@ -3,16 +3,32 @@ import {
   ExecutionContext,
   UnauthorizedException,
   CanActivate,
+  Optional,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 import { JwtPayload, JwtUser } from '../interfaces/jwt-payload.interface';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
-  private readonly jwtService = new JwtService({
-    secret: process.env.JWT_SECRET || '',
-  });
+  private readonly jwtService: JwtService;
+
+  constructor(@Optional() configService?: ConfigService) {
+    const secret =
+      configService?.get<string>('jwt.secret') ??
+      (process.env.NODE_ENV === 'test'
+        ? 'ourpocket-development-secret'
+        : undefined);
+
+    if (!secret) {
+      throw new Error('JWT_SECRET is required');
+    }
+
+    this.jwtService = new JwtService({
+      secret,
+    });
+  }
 
   canActivate(context: ExecutionContext): boolean {
     const request = context

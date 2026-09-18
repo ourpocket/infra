@@ -1,8 +1,10 @@
 import { DataSource, DataSourceOptions } from 'typeorm';
 import * as dotenv from 'dotenv';
-import { resolve } from 'path';
+import { validateEnvironment } from './configs/env.validation';
+import { resolveEnvironmentFile } from './configs/env-file';
 
-dotenv.config({ path: resolve(process.cwd(), '.env') });
+dotenv.config({ path: resolveEnvironmentFile(__dirname) });
+validateEnvironment(process.env);
 
 const isDevelopment = process.env.NODE_ENV === 'development';
 const isProduction = process.env.NODE_ENV === 'production';

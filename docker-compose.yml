@@ -1,4 +1,3 @@
-version: '3.9'
 services:
   app:
     build:
@@ -24,7 +23,6 @@ services:
     depends_on:
       - postgres
       - redis
-      - webhook
     volumes:
       - .:/usr/src/app
       - /usr/src/app/node_modules
@@ -50,16 +48,6 @@ services:
       - '6379:6379'
     volumes:
       - redis_data:/data
-    networks:
-      - app-network
-
-  webhook:
-    build:
-      context: ../webhook
-    environment:
-      - PORT=5000
-    ports:
-      - '5000:5000'
     networks:
       - app-network
 

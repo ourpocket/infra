@@ -24,12 +24,15 @@ import { UsageModule } from './usage/usage.module';
 
 const TypeORMConfigModule = TypeOrmModule.forRootAsync({
   imports: [NestConfigModule],
-  useFactory: (configService: ConfigService) => configService.get('database')!,
+  useFactory: (configService: ConfigService) =>
+    configService.getOrThrow('database'),
   inject: [ConfigService],
 });
 
 @Module({
   imports: [
+    ConfigModule,
+    TypeORMConfigModule,
     WalletProviderModule,
     AuthModule,
     UserModule,
@@ -50,8 +53,6 @@ const TypeORMConfigModule = TypeOrmModule.forRootAsync({
     }),
     ScheduleModule.forRoot(),
     MailModule,
-    TypeORMConfigModule,
-    ConfigModule,
   ],
   controllers: [AppController, MailController],
   providers: [AppService],

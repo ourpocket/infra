@@ -13,7 +13,7 @@
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/main",
+    "start:prod": "node dist/src/main.js",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -27,7 +27,8 @@
     "migration:revert": "npm run typeorm -- -d ./src/data-source.ts migration:revert",
     "docker:dev": "docker compose up --build",
     "docker:dev:no-cache": "docker compose down && docker compose build --no-cache && docker compose up --force-recreate",
-    "docker:dev:down": "docker compose down"
+    "docker:dev:down": "docker compose down",
+    "seed": "ts-node -r tsconfig-paths/register src/seeds/user.seed.ts"
   },
   "dependencies": {
     "@nestjs/cache-manager": "^3.0.1",

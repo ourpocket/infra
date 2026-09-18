@@ -15,9 +15,9 @@ import { PlatformAccountModule } from '../platform-account/platform-account.modu
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('jwt.secret'),
+        secret: configService.getOrThrow<string>('jwt.secret'),
         signOptions: {
-          expiresIn: configService.get('jwt.expiresIn'),
+          expiresIn: configService.getOrThrow('jwt.expiresIn'),
         },
       }),
       inject: [ConfigService],
