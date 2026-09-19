@@ -53,6 +53,9 @@ enum PROVIDER_CAPABILITY_ENUM {
   VIRTUAL_ACCOUNTS = 'virtual_accounts',
   RECURRING_PAYMENTS = 'recurring_payments',
   ACCOUNT_LINKING = 'account_linking',
+  ACCOUNT_RESOLUTION = 'account_resolution',
+  PAYOUT_RECIPIENTS = 'payout_recipients',
+  PROVIDER_ACTIVITY = 'provider_activity',
   POLICIES = 'policies',
 }
 

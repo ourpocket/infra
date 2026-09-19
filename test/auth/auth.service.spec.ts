@@ -9,12 +9,14 @@ import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { User } from '../../src/entities/user.entity';
+import { ConfigService } from '@nestjs/config';
 
 describe('AuthService', () => {
   let service: AuthService;
   let userRepository: any;
   let jwtService: any;
   let mailService: any;
+  let configService: { get: jest.Mock };
 
   beforeEach(async () => {
     userRepository = {
@@ -31,6 +33,9 @@ describe('AuthService', () => {
       sendVerificationEmail: jest.fn(),
       sendPasswordResetEmail: jest.fn(),
     };
+    configService = {
+      get: jest.fn().mockReturnValue('false'),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -38,6 +43,7 @@ describe('AuthService', () => {
         { provide: UserRepository, useValue: userRepository },
         { provide: JwtService, useValue: jwtService },
         { provide: MailService, useValue: mailService },
+        { provide: ConfigService, useValue: configService },
       ],
     }).compile();
 
@@ -56,6 +62,15 @@ describe('AuthService', () => {
       acceptTerms: true,
       provider: AUTH_TYPE_ENUM.LOCAL,
     };
+
+    it('should reject public registration while private beta is enabled', async () => {
+      configService.get.mockReturnValue('true');
+
+      await expect(service.createAccount(createAccountDto)).rejects.toThrow(
+        MESSAGES.ERROR.BETA_ACCESS_ONLY,
+      );
+      expect(userRepository.findByEmail).not.toHaveBeenCalled();
+    });
 
     it('should throw error if terms not accepted', async () => {
       await expect(

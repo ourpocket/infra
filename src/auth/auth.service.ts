@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
   InternalServerErrorException,
@@ -21,6 +22,7 @@ import { MailService } from 'src/mail/mail.service';
 
 import { UserRepository } from 'src/user/user.repository';
 import { PlatformAccountRepository } from '../platform-account/platform-account.repository';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class AuthService {
@@ -30,6 +32,7 @@ export class AuthService {
     private readonly userRepository: UserRepository,
     private readonly jwtService: JwtService,
     private readonly mailService: MailService,
+    private readonly configService: ConfigService,
     @Optional()
     private readonly platformAccountRepository?: PlatformAccountRepository,
   ) {}
@@ -37,6 +40,10 @@ export class AuthService {
   async createAccount(
     dto: CreateAccountDto,
   ): Promise<Omit<User, 'passwordHash'>> {
+    if (this.configService.get<string>('BETA_ACCESS_ONLY') !== 'false') {
+      throw new ForbiddenException(MESSAGES.ERROR.BETA_ACCESS_ONLY);
+    }
+
     const provider = dto.provider ?? AUTH_TYPE_ENUM.LOCAL;
 
     if (!dto.acceptTerms) {

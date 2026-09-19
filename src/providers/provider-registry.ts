@@ -8,6 +8,7 @@ import { PROVIDER_TYPE_ENUM } from '../enums';
 import { FlutterwaveAdapter } from './flutterwave/flutterwave.adapter';
 import { MonoAdapter } from './mono/mono.adapter';
 import { PaystackAdapter } from './paystack/paystack.adapter';
+import { ProviderOperationsAdapter } from './operations';
 import {
   PaymentProviderAdapter,
   PaymentProviderId,
@@ -46,7 +47,7 @@ export interface ProviderDefinition {
 export class ProviderRegistry {
   private readonly adapters = new Map<
     PaymentProviderId,
-    PaymentProviderAdapter
+    PaymentProviderAdapter & ProviderOperationsAdapter
   >([
     [PROVIDER_TYPE_ENUM.PAYSTACK, new PaystackAdapter()],
     [PROVIDER_TYPE_ENUM.FLUTTERWAVE, new FlutterwaveAdapter()],
@@ -67,6 +68,12 @@ export class ProviderRegistry {
   }));
 
   adapter(id: PaymentProviderId): PaymentProviderAdapter {
+    const adapter = this.adapters.get(id);
+    if (!adapter) throw new BadRequestException('Unsupported payment provider');
+    return adapter;
+  }
+
+  operations(id: PaymentProviderId): ProviderOperationsAdapter {
     const adapter = this.adapters.get(id);
     if (!adapter) throw new BadRequestException('Unsupported payment provider');
     return adapter;

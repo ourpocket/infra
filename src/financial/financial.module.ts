@@ -13,6 +13,11 @@ import {
   FinancialDashboardController,
   ProviderEventsController,
 } from './financial.controller';
+import {
+  ProviderActivityDashboardController,
+  ProviderOperationsController,
+} from './provider-operations.controller';
+import { ProviderOperationsService } from './provider-operations.service';
 import { FinancialWebhooksService } from './financial-webhooks.service';
 import { FinancialApiGuard, FinancialDashboardGuard } from './financial-auth';
 import { FinancialRetentionService } from './financial-retention.service';
@@ -26,9 +31,12 @@ import { FinancialRetentionService } from './financial-retention.service';
     FinancialController,
     FinancialDashboardController,
     ProviderEventsController,
+    ProviderOperationsController,
+    ProviderActivityDashboardController,
   ],
   providers: [
     FinancialService,
+    ProviderOperationsService,
     PaymentAdapters,
     ProviderRegistry,
     WalletAdapters,

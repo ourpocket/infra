@@ -29,7 +29,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Register a developer account',
     description:
-      'Creates a developer account for local or Google authentication. Local registrations require password, country, and accepted terms.',
+      'Creates a developer account for local or Google authentication when public registration is enabled. Local registrations require password, country, and accepted terms.',
   })
   @ApiExtraModels(CreateAccountLocalDto, CreateAccountGoogleDto)
   @ApiBody({
@@ -49,6 +49,10 @@ export class AuthController {
   })
   @ApiResponse({ status: 201, description: 'Account registered' })
   @ApiResponse({ status: 400, description: 'Invalid registration payload' })
+  @ApiResponse({
+    status: 403,
+    description: 'Private beta registration gate is enabled',
+  })
   @ResponseMessage(MESSAGES.SUCCESS.USER_REGISTERED)
   createAccount(@Body() createAccountDto: CreateAccountDto) {
     return this.authService.createAccount(createAccountDto);

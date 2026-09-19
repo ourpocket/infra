@@ -20,6 +20,9 @@ export enum ProviderCapability {
   AccountLinking = 'account_linking',
   FinancialData = 'financial_data',
   IdentityVerification = 'identity_verification',
+  AccountResolution = 'account_resolution',
+  PayoutRecipients = 'payout_recipients',
+  ProviderActivity = 'provider_activity',
 }
 
 export const checkoutContactSchema = z.object({

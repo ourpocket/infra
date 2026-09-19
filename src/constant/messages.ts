@@ -18,6 +18,8 @@ export const MESSAGES = {
     TERMS_NOT_ACCEPTED: 'You must accept the Terms to register',
     PASSWORD_REQUIRED: 'Password is required',
     EMAIL_ALREADY_IN_USE: 'Email already in use',
+    BETA_ACCESS_ONLY:
+      'Public registration is unavailable while OurPocket is in private beta. Request beta access instead.',
   },
 
   AUTHENTICATION: {
