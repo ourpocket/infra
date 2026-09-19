@@ -4,14 +4,14 @@ FROM node:20-alpine AS base
 
 WORKDIR /usr/src/app
 
-# Install pnpm globally
-RUN npm install -g pnpm
+# Keep the package manager compatible with Node 20 and the lockfile.
+RUN npm install -g pnpm@10.34.5
 
 # Copy package files for caching
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
 # Install dependencies
-RUN pnpm install
+RUN pnpm install --frozen-lockfile
 
 COPY . .
 
