@@ -15,7 +15,12 @@ export class BetaApplication {
   @Column({ type: 'varchar', length: 254 })
   email!: string;
 
-  @Column({ name: 'company_name', type: 'varchar', length: 160, nullable: true })
+  @Column({
+    name: 'company_name',
+    type: 'varchar',
+    length: 160,
+    nullable: true,
+  })
   companyName?: string | null;
 
   @Column({ name: 'use_case', type: 'varchar', length: 80 })

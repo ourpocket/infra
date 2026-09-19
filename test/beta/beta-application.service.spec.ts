@@ -1,4 +1,24 @@
 import { BetaApplicationService } from '../../src/beta/beta-application.service';
+import { BetaApplication } from '../../src/entities/beta-application.entity';
+import { getMetadataArgsStorage } from 'typeorm';
+
+it('maps beta application fields to the migrated database columns', () => {
+  const columns = getMetadataArgsStorage().columns.filter(
+    (column) => column.target === BetaApplication,
+  );
+  const columnNames = Object.fromEntries(
+    columns.map((column) => [
+      column.propertyName,
+      column.options.name ?? column.propertyName,
+    ]),
+  );
+
+  expect(columnNames).toMatchObject({
+    companyName: 'company_name',
+    useCase: 'use_case',
+    createdAt: 'created_at',
+  });
+});
 
 describe('BetaApplicationService', () => {
   function createService() {
