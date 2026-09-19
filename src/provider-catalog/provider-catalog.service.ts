@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 import { PROVIDER_CATALOG_STATUS_ENUM, PROVIDER_TYPE_ENUM } from '../enums';
 import { ProviderCatalog } from '../entities/provider-catalog.entity';
-import { RoutingEngineService } from '../routing/routing-engine.service';
 import { CreateProviderCatalogDto } from './dto/create-provider-catalog.dto';
 import { UpdateProviderCatalogDto } from './dto/update-provider-catalog.dto';
 import { ProviderCatalogRepository } from './provider-catalog.repository';
@@ -15,7 +14,6 @@ import { ProviderCatalogRepository } from './provider-catalog.repository';
 export class ProviderCatalogService {
   constructor(
     private readonly providerCatalogRepository: ProviderCatalogRepository,
-    private readonly routingEngineService: RoutingEngineService,
   ) {}
 
   listPublic(): Promise<ProviderCatalog[]> {
@@ -51,7 +49,7 @@ export class ProviderCatalogService {
     const provider = await this.findById(id);
     const nextStatus = dto.status ?? provider.status;
     const nextAdapterType =
-      dto.adapterType ?? provider.adapterType ?? undefined;
+      dto.adapterType === undefined ? provider.adapterType : dto.adapterType;
 
     this.assertActiveProviderHasAdapter(nextStatus, nextAdapterType);
 

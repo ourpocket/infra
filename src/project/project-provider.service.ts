@@ -118,6 +118,8 @@ export class ProjectProviderService {
     });
 
     if (existing) {
+      existing.providerCatalogId = null;
+      existing.provider = null;
       existing.environment = environment;
       existing.config = this.encryptConfig(dto.config);
       existing.isActive = dto.isActive ?? true;

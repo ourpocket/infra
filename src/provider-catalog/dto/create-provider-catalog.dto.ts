@@ -54,6 +54,7 @@ export class CreateProviderCatalogDto {
 
   @ApiProperty({ type: [ProviderCredentialFieldDto] })
   @IsArray()
+  @ArrayUnique((field: ProviderCredentialFieldDto) => field.key)
   @ValidateNested({ each: true })
   @Type(() => ProviderCredentialFieldDto)
   credentialFields!: ProviderCredentialFieldDto[];

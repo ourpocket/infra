@@ -50,6 +50,24 @@ export interface RefundResult {
 }
 @Injectable()
 export class PaymentAdapters {
+  private parseProvider<T>(schema: z.ZodType<T>, value: unknown): T {
+    const parsed = schema.safeParse(value);
+    if (!parsed.success)
+      throw new BadGatewayException('Provider response is malformed');
+    return parsed.data;
+  }
+  private providerMajorToMinor(
+    amount: string | number,
+    currency: string,
+  ): string {
+    if (!Intl.supportedValuesOf('currency').includes(currency))
+      throw new BadGatewayException('Provider returned unsupported currency');
+    try {
+      return majorToMinor(amount, currency);
+    } catch {
+      throw new BadGatewayException('Provider returned an invalid amount');
+    }
+  }
   private async request(
     provider: PaymentProvider,
     apiKey: string,
@@ -69,7 +87,7 @@ export class PaymentAdapters {
       timeout: 15000,
       maxRedirects: 0,
     });
-    const parsed = envelope.parse(response.data);
+    const parsed = this.parseProvider(envelope, response.data);
     if (parsed.status !== true && parsed.status !== 'success')
       throw new BadGatewayException('Provider rejected operation');
     return parsed.data;
@@ -80,20 +98,23 @@ export class PaymentAdapters {
     input: CheckoutInput,
   ): Promise<CheckoutResult> {
     if (provider === 'paystack') {
-      const data = z
-        .object({ authorization_url: z.string().url(), reference: z.string() })
-        .parse(
-          await this.request(provider, key, 'POST', '/transaction/initialize', {
-            reference: input.reference,
-            amount: input.amount,
-            currency: input.currency,
-            email: input.email,
-            callback_url: input.callbackUrl,
-          }),
-        );
+      const data = this.parseProvider(
+        z.object({
+          authorization_url: z.string().url(),
+          reference: z.string(),
+        }),
+        await this.request(provider, key, 'POST', '/transaction/initialize', {
+          reference: input.reference,
+          amount: input.amount,
+          currency: input.currency,
+          email: input.email,
+          callback_url: input.callbackUrl,
+        }),
+      );
       return { reference: data.reference, checkoutUrl: data.authorization_url };
     }
-    const data = z.object({ link: z.string().url() }).parse(
+    const data = this.parseProvider(
+      z.object({ link: z.string().url() }),
       await this.request(provider, key, 'POST', '/payments', {
         tx_ref: input.reference,
         amount: minorToMajor(input.amount, input.currency),
@@ -109,25 +130,26 @@ export class PaymentAdapters {
     key: string,
     reference: string,
   ): Promise<PaymentVerification> {
-    const data = z
-      .object({
+    const data = this.parseProvider(
+      z.object({
         id: scalar,
         reference: z.string().optional(),
         tx_ref: z.string().optional(),
         amount: scalar,
         currency: z.string(),
         status: z.string(),
-      })
-      .parse(
-        await this.request(
-          provider,
-          key,
-          'GET',
-          provider === 'paystack'
-            ? `/transaction/verify/${encodeURIComponent(reference)}`
-            : `/transactions/verify_by_reference?tx_ref=${encodeURIComponent(reference)}`,
-        ),
-      );
+      }),
+      await this.request(
+        provider,
+        key,
+        'GET',
+        provider === 'paystack'
+          ? `/transaction/verify/${encodeURIComponent(reference)}`
+          : `/transactions/verify_by_reference?tx_ref=${encodeURIComponent(reference)}`,
+      ),
+    );
+    if (!Intl.supportedValuesOf('currency').includes(data.currency))
+      throw new BadGatewayException('Provider returned unsupported currency');
     if (
       provider === 'paystack' &&
       typeof data.amount === 'number' &&
@@ -143,7 +165,7 @@ export class PaymentAdapters {
       amount:
         provider === 'paystack'
           ? String(data.amount)
-          : majorToMinor(data.amount, data.currency),
+          : this.providerMajorToMinor(data.amount, data.currency),
       currency: data.currency,
       status:
         data.status === 'success' || data.status === 'successful'
@@ -160,21 +182,20 @@ export class PaymentAdapters {
     amount: string,
     currency: string,
   ): Promise<RefundResult> {
-    const data = z
-      .object({ id: scalar, status: z.string() })
-      .parse(
-        await this.request(
-          provider,
-          key,
-          'POST',
-          provider === 'paystack'
-            ? '/refund'
-            : `/transactions/${encodeURIComponent(paymentReference)}/refund`,
-          provider === 'paystack'
-            ? { transaction: paymentReference, amount, currency }
-            : { amount: minorToMajor(amount, currency) },
-        ),
-      );
+    const data = this.parseProvider(
+      z.object({ id: scalar, status: z.string() }),
+      await this.request(
+        provider,
+        key,
+        'POST',
+        provider === 'paystack'
+          ? '/refund'
+          : `/transactions/${encodeURIComponent(paymentReference)}/refund`,
+        provider === 'paystack'
+          ? { transaction: paymentReference, amount, currency }
+          : { amount: minorToMajor(amount, currency) },
+      ),
+    );
     return {
       reference: String(data.id),
       status: refundStatus(provider, data.status),
@@ -192,8 +213,8 @@ export class PaymentAdapters {
       paymentReference: string;
     }
   > {
-    const data = z
-      .object({
+    const data = this.parseProvider(
+      z.object({
         id: scalar,
         status: z.string(),
         amount: scalar.optional(),
@@ -203,17 +224,16 @@ export class PaymentAdapters {
         AmountRefunded: scalar.optional(),
         tx_id: scalar.optional(),
         TransactionId: scalar.optional(),
-      })
-      .parse(
-        await this.request(
-          provider,
-          key,
-          'GET',
-          provider === 'paystack'
-            ? `/refund/${encodeURIComponent(reference)}`
-            : `/refunds/${encodeURIComponent(reference)}`,
-        ),
-      );
+      }),
+      await this.request(
+        provider,
+        key,
+        'GET',
+        provider === 'paystack'
+          ? `/refund/${encodeURIComponent(reference)}`
+          : `/refunds/${encodeURIComponent(reference)}`,
+      ),
+    );
     const amount =
       provider === 'paystack'
         ? data.amount
@@ -229,6 +249,11 @@ export class PaymentAdapters {
     )
       throw new BadGatewayException('Refund verification fields missing');
     if (
+      data.currency &&
+      !Intl.supportedValuesOf('currency').includes(data.currency)
+    )
+      throw new BadGatewayException('Provider returned unsupported currency');
+    if (
       provider === 'paystack' &&
       typeof amount === 'number' &&
       !Number.isSafeInteger(amount)
@@ -240,7 +265,7 @@ export class PaymentAdapters {
       amount:
         provider === 'paystack'
           ? String(amount)
-          : majorToMinor(amount, data.currency ?? currency),
+          : this.providerMajorToMinor(amount, data.currency ?? currency),
       currency: data.currency ?? currency,
       paymentReference: String(payment),
     };

@@ -7,7 +7,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
-import { DataSource } from 'typeorm';
+import { DataSource, LessThan } from 'typeorm';
 import { Queue, Worker } from 'bullmq';
 import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { request } from 'node:https';
@@ -30,17 +30,21 @@ export const retryDelays = [60000, 300000, 1800000, 7200000, 43200000];
 const eventTypes = [
   'payment.created',
   'payment.pending',
+  'payment.unknown',
   'payment.completed',
   'payment.failed',
   'refund.created',
   'refund.pending',
+  'refund.unknown',
   'refund.completed',
   'refund.failed',
   'transfer.created',
   'transfer.pending',
+  'transfer.unknown',
   'transfer.completed',
   'transfer.failed',
   'wallet.created',
+  'wallet.completed',
   'customer.created',
 ];
 @Injectable()
@@ -131,7 +135,10 @@ export class FinancialWebhooksService implements OnModuleInit, OnModuleDestroy {
         }
       });
       const pending = await this.db.manager.find(FinancialDelivery, {
-        where: { status: 'pending' },
+        where: [
+          { status: 'pending' },
+          { status: 'processing', leaseExpiresAt: LessThan(new Date()) },
+        ],
         order: { createdAt: 'ASC' },
       });
       for (const item of pending) {
@@ -142,9 +149,17 @@ export class FinancialWebhooksService implements OnModuleInit, OnModuleDestroy {
             { deliveryId: item.id },
             { jobId: item.id, attempts: 6, backoff: { type: 'custom' } },
           );
-        } else if ((await job.getState()) === 'failed' && item.attempts < 6) {
-          // A stalled worker may fail the Redis job before its SQL attempt is committed. SQL remains authoritative.
-          await job.retry('failed');
+        } else if (item.attempts < 6) {
+          const state = await job.getState();
+          if (state === 'failed') await job.retry('failed');
+          if (state === 'completed' && item.status === 'processing') {
+            await job.remove();
+            await this.queue.add(
+              'deliver',
+              { deliveryId: item.id },
+              { jobId: item.id, attempts: 6, backoff: { type: 'custom' } },
+            );
+          }
         }
       }
     } finally {
@@ -235,137 +250,156 @@ export class FinancialWebhooksService implements OnModuleInit, OnModuleDestroy {
     return { resourceId: resource.id, event: 'customer.created' };
   }
   async deliver(id: string) {
-    return this.db
-      .transaction(async (manager) => {
-        const delivery = await manager.findOne(FinancialDelivery, {
-          where: { id },
-          lock: { mode: 'pessimistic_write' },
-        });
-        if (!delivery || delivery.status !== 'pending') return;
-        const endpoint = await manager.findOne(Webhook, {
-          where: {
-            id: delivery.webhookId,
-            project: { id: delivery.projectId },
-            environment: delivery.environment,
-            isActive: true,
-          },
-        });
-        const event = await manager.findOneByOrFail(FinancialEvent, {
-          id: delivery.eventId,
-        });
-        if (!endpoint) {
-          delivery.status = 'failed';
-          await manager.save(delivery);
-          return;
-        }
-        const started = Date.now();
-        let statusCode: number | null = null;
-        let response = '';
-        try {
-          const { url, address } = await webhookDestination(endpoint.url);
-          const payload = JSON.stringify({
-            id: event.id,
-            type: event.type,
-            environment: event.environment,
-            requestId: event.requestId,
-            createdAt: event.createdAt,
-            data: event.data,
-          });
-          const timestamp = Math.floor(Date.now() / 1000).toString();
-          const signature = createHmac('sha256', endpoint.secret)
-            .update(`${timestamp}.${payload}`)
-            .digest('hex');
-          const result = await new Promise<{ status: number; body: string }>(
-            (resolve, reject) => {
-              // Connect to the validated IP while preserving TLS hostname verification; no redirects or second DNS lookup.
-              const outgoing = request(
-                url,
-                {
-                  method: 'POST',
-                  hostname: address.address,
-                  servername: url.hostname,
-                  headers: {
-                    Host: url.host,
-                    'Content-Type': 'application/json',
-                    'Content-Length': Buffer.byteLength(payload),
-                    'OurPocket-Signature': `t=${timestamp},v1=${signature}`,
-                    'X-Request-Id': event.requestId,
-                    'OurPocket-Delivery-Id': delivery.id,
-                  },
-                  timeout: 10000,
-                },
-                (incoming) => {
-                  let bytes = 0;
-                  const chunks: Buffer[] = [];
-                  incoming.on('data', (chunk: Buffer) => {
-                    bytes += chunk.length;
-                    if (bytes <= 4096) chunks.push(chunk);
-                    if (bytes > 65536)
-                      incoming.destroy(new Error('Response too large'));
-                  });
-                  incoming.on('error', reject);
-                  incoming.on('end', () =>
-                    resolve({
-                      status: incoming.statusCode ?? 0,
-                      body: Buffer.concat(chunks).toString('utf8'),
-                    }),
-                  );
-                },
+    const claim = await this.db.transaction(async (manager) => {
+      const delivery = await manager.findOne(FinancialDelivery, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (
+        !delivery ||
+        (delivery.status !== 'pending' &&
+          !(
+            delivery.status === 'processing' &&
+            delivery.leaseExpiresAt &&
+            delivery.leaseExpiresAt < new Date()
+          ))
+      )
+        return null;
+      const endpoint = await manager.findOne(Webhook, {
+        where: {
+          id: delivery.webhookId,
+          project: { id: delivery.projectId },
+          environment: delivery.environment,
+          isActive: true,
+        },
+      });
+      const event = await manager.findOneByOrFail(FinancialEvent, {
+        id: delivery.eventId,
+      });
+      if (!endpoint) {
+        delivery.status = 'failed';
+        delivery.leaseExpiresAt = null;
+        await manager.save(delivery);
+        return null;
+      }
+      delivery.status = 'processing';
+      delivery.leaseExpiresAt = new Date(Date.now() + 60000);
+      await manager.save(delivery);
+      return { delivery, endpoint, event };
+    });
+    if (!claim) return;
+    const { delivery, endpoint, event } = claim;
+    const started = Date.now();
+    let statusCode: number | null = null;
+    let response = '';
+    try {
+      const { url, address } = await webhookDestination(endpoint.url);
+      const payload = JSON.stringify({
+        id: event.id,
+        type: event.type,
+        environment: event.environment,
+        requestId: event.requestId,
+        createdAt: event.createdAt,
+        data: event.data,
+      });
+      const timestamp = Math.floor(Date.now() / 1000).toString();
+      const signature = createHmac('sha256', endpoint.secret)
+        .update(`${timestamp}.${payload}`)
+        .digest('hex');
+      const result = await new Promise<{ status: number; body: string }>(
+        (resolve, reject) => {
+          const outgoing = request(
+            url,
+            {
+              method: 'POST',
+              hostname: address.address,
+              servername: url.hostname,
+              headers: {
+                Host: url.host,
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(payload),
+                'OurPocket-Signature': `t=${timestamp},v1=${signature}`,
+                'X-Request-Id': event.requestId,
+                'OurPocket-Delivery-Id': delivery.id,
+              },
+              timeout: 10000,
+            },
+            (incoming) => {
+              let bytes = 0;
+              const chunks: Buffer[] = [];
+              incoming.on('data', (chunk: Buffer) => {
+                bytes += chunk.length;
+                if (bytes <= 4096) chunks.push(chunk);
+                if (bytes > 65536)
+                  incoming.destroy(new Error('Response too large'));
+              });
+              incoming.on('error', reject);
+              incoming.on('end', () =>
+                resolve({
+                  status: incoming.statusCode ?? 0,
+                  body: Buffer.concat(chunks).toString('utf8'),
+                }),
               );
-              outgoing.on('timeout', () =>
-                outgoing.destroy(new Error('Webhook timed out')),
-              );
-              outgoing.on('error', reject);
-              outgoing.end(payload);
             },
           );
-          statusCode = result.status;
-          try {
-            response = JSON.stringify(redact(JSON.parse(result.body)));
-          } catch {
-            response = '[Non-JSON response omitted]';
-          }
-        } catch {
-          response = '[Delivery failed]';
-        }
-        delivery.attempts += 1;
-        delivery.history.push({
-          attemptedAt: new Date().toISOString(),
-          statusCode,
-          latencyMs: Date.now() - started,
-          response: response.slice(0, 4096),
-        });
-        const success =
-          statusCode !== null && statusCode >= 200 && statusCode < 300;
-        delivery.status = success
-          ? 'completed'
-          : delivery.attempts >= 6
-            ? 'failed'
-            : 'pending';
-        await manager.save(delivery);
-        await this.financial.log(
-          {
-            projectId: delivery.projectId,
-            environment: delivery.environment,
-            requestId: delivery.requestId,
-          },
-          'webhooks.deliver',
-          'application',
-          {
-            deliveryId: delivery.id,
-            eventId: event.id,
-            statusCode,
-            latencyMs: Date.now() - started,
-            attempt: delivery.attempts,
-          },
-          manager,
-        );
-        return { success };
-      })
-      .then((result) => {
-        if (result && !result.success)
-          throw new Error('Webhook delivery failed');
+          outgoing.on('timeout', () =>
+            outgoing.destroy(new Error('Webhook timed out')),
+          );
+          outgoing.on('error', reject);
+          outgoing.end(payload);
+        },
+      );
+      statusCode = result.status;
+      try {
+        response = JSON.stringify(redact(JSON.parse(result.body)));
+      } catch {
+        response = '[Non-JSON response omitted]';
+      }
+    } catch {
+      response = '[Delivery failed]';
+    }
+    const attempt = {
+      attemptedAt: new Date().toISOString(),
+      statusCode,
+      latencyMs: Date.now() - started,
+      response: response.slice(0, 4096),
+    };
+    const success =
+      statusCode !== null && statusCode >= 200 && statusCode < 300;
+    await this.db.transaction(async (manager) => {
+      const current = await manager.findOne(FinancialDelivery, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
       });
+      if (!current || current.status !== 'processing') return;
+      current.attempts += 1;
+      current.history = [...current.history, attempt];
+      current.status = success
+        ? 'completed'
+        : current.attempts >= 6
+          ? 'failed'
+          : 'pending';
+      current.leaseExpiresAt = null;
+      await manager.save(current);
+      await this.financial.log(
+        {
+          projectId: current.projectId,
+          environment: current.environment,
+          requestId: current.requestId,
+        },
+        'webhooks.deliver',
+        'application',
+        {
+          deliveryId: current.id,
+          eventId: event.id,
+          statusCode,
+          latencyMs: attempt.latencyMs,
+          attempt: current.attempts,
+        },
+        manager,
+      );
+    });
+    if (!success) throw new Error('Webhook delivery failed');
   }
   async receive(
     ctx: FinancialContext,

@@ -4,6 +4,15 @@ export class FinancialControlPlane20260920000000 implements MigrationInterface {
   name = 'FinancialControlPlane20260920000000';
 
   public async up(runner: QueryRunner): Promise<void> {
+    await runner.query(`
+      CREATE TABLE financial_control_plane_catalog_backup AS
+      SELECT id, description, capabilities, credential_fields, status
+      FROM provider_catalog
+      WHERE slug IN ('paystack','flutterwave','turnkey','privy')
+    `);
+    await runner.query(
+      `ALTER TABLE financial_deliveries ADD COLUMN "leaseExpiresAt" timestamp NULL`,
+    );
     await runner.query(
       'ALTER TABLE financial_resources DROP CONSTRAINT IF EXISTS financial_resources_status_check',
     );
@@ -112,6 +121,9 @@ export class FinancialControlPlane20260920000000 implements MigrationInterface {
 
   public async down(runner: QueryRunner): Promise<void> {
     await runner.query(
+      `ALTER TABLE financial_deliveries DROP COLUMN "leaseExpiresAt"`,
+    );
+    await runner.query(
       `UPDATE financial_resources SET status='pending' WHERE status='unknown'`,
     );
     await runner.query(
@@ -121,19 +133,15 @@ export class FinancialControlPlane20260920000000 implements MigrationInterface {
       `ALTER TABLE financial_resources ADD CONSTRAINT financial_resources_status_check CHECK (status IN ('pending','completed','failed'))`,
     );
     await runner.query(`
-      UPDATE provider_catalog SET
-        description='Payments and wallet infrastructure for African businesses.',
-        capabilities='["wallet_operations","payment_collection"]'::jsonb,
-        credential_fields='[{"key":"apiKey","label":"Secret key","type":"secret","required":true,"placeholder":"sk_test_..."}]'::jsonb
-      WHERE slug='paystack'
+      UPDATE provider_catalog AS catalog SET
+        description=backup.description,
+        capabilities=backup.capabilities,
+        credential_fields=backup.credential_fields,
+        status=backup.status
+      FROM financial_control_plane_catalog_backup AS backup
+      WHERE catalog.id=backup.id
     `);
-    await runner.query(`
-      UPDATE provider_catalog SET
-        description='Pan-African payment infrastructure for collections and wallet operations.',
-        capabilities='["wallet_operations","payment_collection"]'::jsonb,
-        credential_fields='[{"key":"apiKey","label":"Secret key","type":"secret","required":true,"placeholder":"FLWSECK_TEST-..."}]'::jsonb
-      WHERE slug='flutterwave'
-    `);
+    await runner.query('DROP TABLE financial_control_plane_catalog_backup');
     await runner.query(
       `DELETE FROM provider_catalog WHERE slug IN ('turnkey','privy')`,
     );

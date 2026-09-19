@@ -1,6 +1,20 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 export class FinancialInfrastructure20260919000000 implements MigrationInterface {
   async up(runner: QueryRunner): Promise<void> {
+    await runner.query(`
+      CREATE TABLE financial_provider_catalog_backup (
+        provider_id uuid PRIMARY KEY REFERENCES provider_catalog(id) ON DELETE CASCADE,
+        capabilities jsonb NOT NULL,
+        credential_fields jsonb NOT NULL,
+        status provider_catalog_status_enum NOT NULL
+      )
+    `);
+    await runner.query(`
+      INSERT INTO financial_provider_catalog_backup (provider_id, capabilities, credential_fields, status)
+      SELECT id, capabilities, credential_fields, status
+      FROM provider_catalog
+      WHERE slug IN ('paystack','flutterwave') OR status='active'
+    `);
     await runner.query(
       `ALTER TABLE project_providers ADD COLUMN environment varchar NULL CHECK (environment IN ('sandbox','production'))`,
     );
@@ -53,20 +67,23 @@ export class FinancialInfrastructure20260919000000 implements MigrationInterface
     );
   }
   async down(runner: QueryRunner): Promise<void> {
-    for (const table of [
-      'financial_logs',
-      'financial_receipts',
-      'financial_deliveries',
-      'financial_events',
-      'financial_idempotency',
-      'financial_resources',
-    ])
-      await runner.query(`DROP TABLE ${table}`);
+    await runner.query('DROP TABLE financial_logs');
+    await runner.query('DROP TABLE financial_receipts');
+    await runner.query('DROP TABLE financial_deliveries');
+    await runner.query('DROP TABLE financial_events');
+    await runner.query('DROP TABLE financial_idempotency');
+    await runner.query('DROP TABLE financial_resources');
     await runner.query('DROP INDEX financial_connection_unique');
     await runner.query('ALTER TABLE webhooks DROP COLUMN environment');
     await runner.query('ALTER TABLE project_providers DROP COLUMN environment');
-    await runner.query(
-      `UPDATE provider_catalog SET capabilities = '["wallet_operations","payment_collection"]'::jsonb WHERE slug IN ('paystack','flutterwave')`,
-    );
+    await runner.query(`
+      UPDATE provider_catalog AS catalog SET
+        capabilities=backup.capabilities,
+        credential_fields=backup.credential_fields,
+        status=backup.status
+      FROM financial_provider_catalog_backup AS backup
+      WHERE catalog.id=backup.provider_id
+    `);
+    await runner.query('DROP TABLE financial_provider_catalog_backup');
   }
 }

@@ -7,12 +7,10 @@ import {
 } from '../../src/enums';
 import { ProviderCatalogService } from '../../src/provider-catalog/provider-catalog.service';
 import { ProviderCatalogRepository } from '../../src/provider-catalog/provider-catalog.repository';
-import { RoutingEngineService } from '../../src/routing/routing-engine.service';
 
 describe('ProviderCatalogService', () => {
   let service: ProviderCatalogService;
   let providerCatalogRepository: any;
-  let routingEngineService: any;
 
   beforeEach(async () => {
     providerCatalogRepository = {
@@ -22,9 +20,6 @@ describe('ProviderCatalogService', () => {
       findPublicCatalog: jest.fn(),
       save: jest.fn(),
     };
-    routingEngineService = {
-      listSupportedProviders: jest.fn(),
-    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -32,10 +27,6 @@ describe('ProviderCatalogService', () => {
         {
           provide: ProviderCatalogRepository,
           useValue: providerCatalogRepository,
-        },
-        {
-          provide: RoutingEngineService,
-          useValue: routingEngineService,
         },
       ],
     }).compile();
@@ -61,16 +52,12 @@ describe('ProviderCatalogService', () => {
     providerCatalogRepository.findOne.mockResolvedValue(null);
     providerCatalogRepository.create.mockReturnValue(provider);
     providerCatalogRepository.save.mockResolvedValue(provider);
-    routingEngineService.listSupportedProviders.mockReturnValue([
-      PROVIDER_TYPE_ENUM.PAYSTACK,
-    ]);
 
     await expect(service.create(dto)).resolves.toEqual(provider);
   });
 
-  it('rejects an active entry without a registered adapter', async () => {
+  it('rejects an active entry without an implemented adapter', async () => {
     providerCatalogRepository.findOne.mockResolvedValue(null);
-    routingEngineService.listSupportedProviders.mockReturnValue([]);
 
     await expect(
       service.create({
@@ -81,6 +68,7 @@ describe('ProviderCatalogService', () => {
         category: PROVIDER_CATEGORY_ENUM.GLOBAL,
         capabilities: [],
         credentialFields: [],
+        adapterType: PROVIDER_TYPE_ENUM.PAGA,
         status: PROVIDER_CATALOG_STATUS_ENUM.ACTIVE,
         sortOrder: 1,
       }),

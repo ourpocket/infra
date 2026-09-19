@@ -75,8 +75,10 @@ export class FinancialDelivery {
   @Column('uuid') webhookId!: string;
   @Column('varchar', { default: 'pending' }) status!:
     | 'pending'
+    | 'processing'
     | 'completed'
     | 'failed';
+  @Column('timestamp', { nullable: true }) leaseExpiresAt!: Date | null;
   @Column('int', { default: 0 }) attempts!: number;
   @Column('jsonb', { default: () => "'[]'::jsonb" }) history!: Array<{
     attemptedAt: string;

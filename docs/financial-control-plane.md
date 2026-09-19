@@ -10,7 +10,7 @@ Run migrations in timestamp order before releasing the frontend:
 2. `20260919000000-FinancialInfrastructure`
 3. `20260920000000-FinancialControlPlane`
 
-The final migration adds routing policies, provider health snapshots, reconciliation runs, truthful payment capabilities, Flutterwave webhook credentials, and the Turnkey and Privy catalog entries. Existing financial records remain unchanged.
+The final migration adds routing policies, provider health snapshots, reconciliation runs, recoverable webhook delivery leases, truthful payment capabilities, Flutterwave webhook credentials, and the Turnkey and Privy catalog entries. Existing financial records remain unchanged.
 
 ## Required configuration
 
