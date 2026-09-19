@@ -10,6 +10,7 @@ import { ProjectController } from './project.controller';
 import { ProjectApiKeyController } from './project-api-key.controller';
 import { ProjectProviderService } from './project-provider.service';
 import { ProjectProviderController } from './project-provider.controller';
+import { ProviderRegistry } from '../providers/provider-registry';
 import { ProjectRepository } from './project.repository';
 import { ProjectApiKeyRepository } from './project-api-key.repository';
 import { ProjectProviderRepository } from './project-provider.repository';
@@ -35,6 +36,7 @@ import { ProviderCatalogModule } from '../provider-catalog/provider-catalog.modu
     ProjectRepository,
     ProjectApiKeyRepository,
     ProjectProviderRepository,
+    ProviderRegistry,
     ProjectApiKeyGuard,
   ],
   exports: [
@@ -44,6 +46,7 @@ import { ProviderCatalogModule } from '../provider-catalog/provider-catalog.modu
     ProjectRepository,
     ProjectApiKeyRepository,
     ProjectProviderRepository,
+    ProviderRegistry,
     ProjectApiKeyGuard,
   ],
 })

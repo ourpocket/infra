@@ -1,5 +1,7 @@
 import {
   IsEmail,
+  IsOptional,
+  ValidateNested,
   IsIn,
   IsString,
   IsUUID,
@@ -16,6 +18,7 @@ import {
   ValidateIf,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 const fiatCurrencies = Intl.supportedValuesOf('currency').filter(
   (currency) =>
     !['XAU', 'XAG', 'XDR', 'XPT', 'XPD', 'XXX', 'XTS'].includes(currency),
@@ -30,13 +33,37 @@ export const scenarios = [
 ] as const;
 export type Scenario = (typeof scenarios)[number];
 export class CustomerDto {
-  @ApiProperty() @IsEmail() email!: string;
+  @ApiProperty({
+    description: 'Deprecated. OurPocket does not store end-customer records.',
+  })
+  @IsEmail()
+  email!: string;
+
   @ApiPropertyOptional()
   @ValidateIf((_: unknown, value: unknown) => value !== undefined)
   @IsString()
   @MaxLength(120)
   name?: string;
 }
+
+export class CheckoutContactDto {
+  @ApiProperty({
+    description:
+      'Forwarded to the selected provider and never persisted by OurPocket.',
+  })
+  @IsEmail()
+  email!: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Forwarded to the selected provider and never persisted by OurPocket.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  name?: string;
+}
+
 export class AmountDto {
   @ApiProperty({
     example: '50000',
@@ -54,18 +81,75 @@ export class AmountDto {
   scenario?: Scenario;
 }
 export class PaymentDto extends AmountDto {
-  @ApiProperty() @IsUUID() customer!: string;
-  @ApiPropertyOptional({ enum: ['paystack', 'flutterwave'] })
+  @ApiPropertyOptional({
+    description:
+      'Opaque caller-generated reference. Required for production and never persisted by OurPocket.',
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(/^[A-Za-z0-9_.-]{8,120}$/)
+  reference?: string;
+
+  @ApiPropertyOptional({ enum: ['paystack', 'flutterwave', 'mono'] })
   @ValidateIf((_: unknown, value: unknown) => value !== undefined)
-  @IsIn(['paystack', 'flutterwave'])
-  provider?: 'paystack' | 'flutterwave';
+  @IsIn(['paystack', 'flutterwave', 'mono'])
+  provider?: 'paystack' | 'flutterwave' | 'mono';
+
+  @ApiPropertyOptional({ type: CheckoutContactDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CheckoutContactDto)
+  contact?: CheckoutContactDto;
+
+  @ApiPropertyOptional({
+    description:
+      'Deprecated customer resource id. Ignored and never read in production.',
+  })
+  @IsOptional()
+  @IsUUID()
+  customer?: string;
+
   @ApiPropertyOptional()
   @ValidateIf((_: unknown, value: unknown) => value !== undefined)
   @IsUrl({ protocols: ['https'], require_protocol: true })
   callbackUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(240)
+  description?: string;
 }
 export class RefundDto {
-  @ApiProperty() @IsUUID() payment!: string;
+  @ApiPropertyOptional({
+    description: 'Deprecated stored payment id. Ignored in production.',
+  })
+  @IsOptional()
+  @IsUUID()
+  payment?: string;
+
+  @ApiPropertyOptional({ enum: ['paystack', 'flutterwave', 'mono'] })
+  @IsOptional()
+  @IsIn(['paystack', 'flutterwave', 'mono'])
+  provider?: 'paystack' | 'flutterwave' | 'mono';
+
+  @ApiPropertyOptional({
+    description: 'Provider transaction reference. Required in production.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  paymentReference?: string;
+
+  @ApiPropertyOptional({
+    example: 'NGN',
+    description: 'Required in production.',
+  })
+  @IsOptional()
+  @Matches(/^[A-Z]{3}$/)
+  @IsIn(fiatCurrencies)
+  currency?: string;
+
   @ApiPropertyOptional({ example: '5000' })
   @ValidateIf((_: unknown, value: unknown) => value !== undefined)
   @Matches(/^[1-9]\d{0,29}$/)
@@ -75,6 +159,25 @@ export class RefundDto {
   @IsIn(scenarios)
   scenario?: Scenario;
 }
+
+export class PaymentVerificationDto {
+  @ApiProperty({ enum: ['paystack', 'flutterwave', 'mono'] })
+  @IsIn(['paystack', 'flutterwave', 'mono'])
+  provider!: 'paystack' | 'flutterwave' | 'mono';
+
+  @ApiProperty()
+  @IsString()
+  @MaxLength(160)
+  reference!: string;
+}
+
+export class RefundVerificationDto extends PaymentVerificationDto {
+  @ApiProperty({ example: 'NGN' })
+  @Matches(/^[A-Z]{3}$/)
+  @IsIn(fiatCurrencies)
+  currency!: string;
+}
+
 export class WalletDto {
   @ApiPropertyOptional({
     example: 'NGN',

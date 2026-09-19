@@ -20,6 +20,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ProjectProviderService } from './project-provider.service';
 import { ConfigureProjectProviderDto } from './dto/configure-project-provider.dto';
 import { ConnectProjectProviderDto } from './dto/connect-project-provider.dto';
+import { PROVIDER_TYPE_ENUM } from '../enums';
 
 @ApiTags('Project Providers')
 @ApiBearerAuth()
@@ -66,6 +67,25 @@ export class ProjectProviderController {
       userId,
       projectId,
       dto,
+      connectionEnvironment(environment),
+    );
+  }
+
+  @Post(':type/validate')
+  @ApiOperation({
+    summary:
+      'Validate a provider connection without storing provider account data',
+  })
+  validateProvider(
+    @CurrentUser('userId') userId: string,
+    @Param('projectId') projectId: string,
+    @Param('type') type: PROVIDER_TYPE_ENUM,
+    @Headers('x-environment') environment?: string,
+  ) {
+    return this.projectProviderService.validateProvider(
+      userId,
+      projectId,
+      type,
       connectionEnvironment(environment),
     );
   }

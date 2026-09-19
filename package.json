@@ -29,7 +29,9 @@
     "docker:dev": "docker compose up --build",
     "docker:dev:no-cache": "docker compose down && docker compose build --no-cache && docker compose up --force-recreate",
     "docker:dev:down": "docker compose down",
-    "seed": "ts-node -r tsconfig-paths/register src/seeds/user.seed.ts"
+    "seed": "ts-node -r tsconfig-paths/register src/seeds/user.seed.ts",
+    "migration:run:production": "node dist/src/database/migration-runner.js",
+    "schema:check": "node dist/src/database/schema-check.js"
   },
   "dependencies": {
     "@nestjs/cache-manager": "^3.0.1",

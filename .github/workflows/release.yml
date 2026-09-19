@@ -1,0 +1,38 @@
+name: Release infrastructure
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**'
+      - '.github/workflows/release.yml'
+
+jobs:
+  migrate-and-release:
+    runs-on: ubuntu-latest
+    env:
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+      RAILWAY_ENVIRONMENT_ID: ${{ secrets.RAILWAY_ENVIRONMENT_ID }}
+      RAILWAY_MIGRATOR_SERVICE_ID: ${{ secrets.RAILWAY_MIGRATOR_SERVICE_ID }}
+      RAILWAY_API_SERVICE_ID: ${{ secrets.RAILWAY_API_SERVICE_ID }}
+      RAILWAY_WEBHOOK_WORKER_SERVICE_ID: ${{ secrets.RAILWAY_WEBHOOK_WORKER_SERVICE_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Railway CLI
+        run: npm install --global @railway/cli
+      - name: Run migration release job
+        run: railway up --project "$RAILWAY_PROJECT_ID" --service "$RAILWAY_MIGRATOR_SERVICE_ID" --environment "$RAILWAY_ENVIRONMENT_ID" --detach
+      - name: Wait for migration job
+        run: |
+          for attempt in $(seq 1 60); do
+            status=$(railway deployment list --project "$RAILWAY_PROJECT_ID" --service "$RAILWAY_MIGRATOR_SERVICE_ID" --environment "$RAILWAY_ENVIRONMENT_ID" --json | jq -r '.[0].status')
+            test "$status" = SUCCESS && exit 0
+            test "$status" = FAILED -o "$status" = CRASHED && exit 1
+            sleep 5
+          done
+          exit 1
+      - name: Release API after schema gate
+        run: railway up --project "$RAILWAY_PROJECT_ID" --service "$RAILWAY_API_SERVICE_ID" --environment "$RAILWAY_ENVIRONMENT_ID" --detach
+      - name: Release webhook worker after schema gate
+        run: railway up --project "$RAILWAY_PROJECT_ID" --service "$RAILWAY_WEBHOOK_WORKER_SERVICE_ID" --environment "$RAILWAY_ENVIRONMENT_ID" --detach

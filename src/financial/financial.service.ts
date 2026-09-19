@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  GoneException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -17,6 +18,9 @@ import { PROVIDER_TYPE_ENUM, PROVIDER_CATALOG_STATUS_ENUM } from '../enums';
 import {
   AmountDto,
   CustomerDto,
+  CheckoutContactDto,
+  PaymentVerificationDto,
+  RefundVerificationDto,
   PaymentDto,
   RefundDto,
   Scenario,
@@ -42,13 +46,19 @@ import {
 import { fingerprint, redact } from './financial-utils';
 import { PaymentAdapters } from './payment-adapters';
 import { WalletAdapters } from './wallet-adapters';
+import { ProviderRegistry } from '../providers/provider-registry';
+import { PaymentProviderId, ProviderCapability } from '../providers/contracts';
 export interface FinancialContext {
   projectId: string;
   environment: Environment;
   requestId: string;
   apiKeyId?: string;
 }
-export const paymentProviders: PaymentProvider[] = ['paystack', 'flutterwave'];
+export const paymentProviders: PaymentProvider[] = [
+  'paystack',
+  'flutterwave',
+  'mono',
+];
 export function keyContext(
   key: ProjectApiKey,
   requestId: string = randomUUID(),
@@ -67,6 +77,7 @@ export class FinancialService {
     private readonly providers: ProjectProviderService,
     private readonly adapters: PaymentAdapters,
     private readonly walletAdapters: WalletAdapters,
+    private readonly providerRegistry: ProviderRegistry,
   ) {}
   async locked<T>(
     ctx: FinancialContext,
@@ -86,6 +97,10 @@ export class FinancialService {
     kind?: ResourceKind,
     manager: EntityManager = this.db.manager,
   ): Promise<FinancialResource> {
+    if (ctx.environment === 'production')
+      throw new GoneException(
+        'OurPocket does not retain production provider resources',
+      );
     const item = await manager.findOne(FinancialResource, {
       where: {
         id,
@@ -98,6 +113,10 @@ export class FinancialService {
     return item;
   }
   async walletOrLegacy(ctx: FinancialContext, id: string) {
+    if (ctx.environment === 'production')
+      throw new GoneException(
+        'OurPocket does not retain production provider wallets',
+      );
     const current = await this.db.manager.findOne(FinancialResource, {
       where: {
         id,
@@ -114,6 +133,7 @@ export class FinancialService {
     return { wallet: legacy, balance: null, environment: 'legacy' as const };
   }
   list(ctx: FinancialContext, kind?: ResourceKind | ResourceKind[]) {
+    if (ctx.environment === 'production') return Promise.resolve([]);
     return this.db.manager.find(FinancialResource, {
       where: {
         projectId: ctx.projectId,
@@ -140,6 +160,7 @@ export class FinancialService {
     }));
   }
   events(ctx: FinancialContext) {
+    if (ctx.environment === 'production') return Promise.resolve([]);
     return this.db.manager.find(FinancialEvent, {
       where: { projectId: ctx.projectId, environment: ctx.environment },
       order: { createdAt: 'DESC' },
@@ -147,6 +168,7 @@ export class FinancialService {
     });
   }
   logs(ctx: FinancialContext) {
+    if (ctx.environment === 'production') return Promise.resolve([]);
     return this.db.manager.find(FinancialLog, {
       where: { projectId: ctx.projectId, environment: ctx.environment },
       order: { createdAt: 'DESC' },
@@ -160,6 +182,9 @@ export class FinancialService {
     details: Record<string, unknown>,
     manager: EntityManager = this.db.manager,
   ) {
+    // Production provider traffic is intentionally stateless: no provider output
+    // or customer data may enter OurPocket persistence through operational logs.
+    if (ctx.environment === 'production') return;
     await manager.save(
       FinancialLog,
       manager.create(FinancialLog, {
@@ -171,6 +196,7 @@ export class FinancialService {
     );
   }
   async emit(manager: EntityManager, item: FinancialResource, type: string) {
+    if (item.environment === 'production') return;
     const data: Record<string, unknown> = {
       id: item.id,
       kind: item.kind,
@@ -201,6 +227,10 @@ export class FinancialService {
       manager: EntityManager,
     ) => Promise<Partial<FinancialResource>> | Partial<FinancialResource>,
   ) {
+    if (ctx.environment === 'production')
+      throw new GoneException(
+        'Production provider operations are stateless and cannot create financial resources',
+      );
     if (!key || key.length > 200 || !key.trim())
       throw new BadRequestException(
         'Idempotency-Key is required (maximum 200 characters)',
@@ -275,14 +305,18 @@ export class FinancialService {
       return { item, created: true };
     });
   }
-  async customer(ctx: FinancialContext, dto: CustomerDto, key?: string) {
-    return (
-      await this.create(ctx, 'customers.create', key, dto, () => ({
-        kind: 'customer',
-        status: 'completed',
-        details: { email: dto.email, name: dto.name },
-      }))
-    ).item;
+  customer(
+    _ctx: FinancialContext,
+    _dto: CustomerDto,
+    _key?: string,
+  ): Promise<never> {
+    return Promise.reject(
+      new GoneException({
+        code: 'customer_storage_not_supported',
+        message:
+          'OurPocket does not store end-customer profiles. Send checkout contact data only with the provider operation.',
+      }),
+    );
   }
   private sandbox(ctx: FinancialContext) {
     if (ctx.environment !== 'sandbox')
@@ -333,6 +367,7 @@ export class FinancialService {
         project: { id: ctx.projectId },
         environment: ctx.environment,
         isActive: true,
+        isVerified: true,
         type: In(paymentProviders),
       },
     });
@@ -479,16 +514,143 @@ export class FinancialService {
       },
     };
   }
-  private credentials(ctx: FinancialContext, provider: PaymentProvider) {
-    return this.providers.getProviderApiKeyForProject(
+  private async credentials(
+    ctx: FinancialContext,
+    provider: PaymentProviderId,
+  ) {
+    const config = await this.providers.getProviderConfigForProject(
       ctx.projectId,
-      provider === 'paystack'
-        ? PROVIDER_TYPE_ENUM.PAYSTACK
-        : PROVIDER_TYPE_ENUM.FLUTTERWAVE,
+      provider as PROVIDER_TYPE_ENUM,
       ctx.environment,
+    );
+    return this.providerRegistry.apiKey(provider, config);
+  }
+
+  private async transparentProvider(
+    ctx: FinancialContext,
+    requested: PaymentProviderId | undefined,
+  ): Promise<PaymentProviderId> {
+    const connections = await this.db.manager.find(ProjectProvider, {
+      where: {
+        project: { id: ctx.projectId },
+        environment: 'production',
+        isActive: true,
+        isVerified: true,
+        type: In(paymentProviders),
+      },
+    });
+    const eligible = connections
+      .map((connection) => String(connection.type))
+      .filter((type): type is PaymentProviderId =>
+        this.providerRegistry.isPaymentProvider(type),
+      );
+    if (requested) {
+      if (!eligible.includes(requested))
+        throw new BadRequestException(
+          'Provider is not connected and active in production',
+        );
+      return requested;
+    }
+    if (eligible.length !== 1)
+      throw new BadRequestException(
+        'Select an explicit provider when zero or multiple provider connections are eligible',
+      );
+    return eligible[0];
+  }
+
+  private checkoutContact(dto: PaymentDto): CheckoutContactDto {
+    if (!dto.contact)
+      throw new BadRequestException(
+        'contact is required for a production hosted checkout',
+      );
+    return dto.contact;
+  }
+
+  private async transparentPayment(ctx: FinancialContext, dto: PaymentDto) {
+    if (!dto.reference)
+      throw new BadRequestException(
+        'reference is required for a production payment',
+      );
+    const provider = await this.transparentProvider(ctx, dto.provider);
+    this.providerRegistry.assertCapability(
+      provider,
+      ProviderCapability.HostedCheckout,
+    );
+    const result = await this.adapters.create(
+      provider,
+      await this.credentials(ctx, provider),
+      {
+        reference: dto.reference,
+        amount: dto.amount,
+        currency: dto.currency,
+        contact: this.checkoutContact(dto),
+        callbackUrl: dto.callbackUrl,
+        description: dto.description,
+      },
+    );
+    // Do not log or persist provider output. Return it only to the caller.
+    return { provider, ...result };
+  }
+
+  async verifyPayment(ctx: FinancialContext, dto: PaymentVerificationDto) {
+    if (ctx.environment !== 'production')
+      throw new BadRequestException(
+        'Use Sandbox simulation endpoints for test operations',
+      );
+    const provider = await this.transparentProvider(ctx, dto.provider);
+    this.providerRegistry.assertCapability(
+      provider,
+      ProviderCapability.PaymentVerification,
+    );
+    return this.adapters.verify(
+      provider,
+      await this.credentials(ctx, provider),
+      dto.reference,
+    );
+  }
+
+  private async transparentRefund(ctx: FinancialContext, dto: RefundDto) {
+    if (!dto.provider || !dto.paymentReference || !dto.amount || !dto.currency)
+      throw new BadRequestException(
+        'provider, paymentReference, amount, and currency are required for a production refund',
+      );
+    const provider = await this.transparentProvider(ctx, dto.provider);
+    this.providerRegistry.assertCapability(
+      provider,
+      ProviderCapability.Refunds,
+    );
+    return this.adapters.refund(
+      provider,
+      await this.credentials(ctx, provider),
+      dto.paymentReference,
+      dto.amount,
+      dto.currency,
+    );
+  }
+
+  async verifyTransparentRefund(
+    ctx: FinancialContext,
+    dto: RefundVerificationDto,
+  ) {
+    if (ctx.environment !== 'production')
+      throw new BadRequestException(
+        'Use Sandbox simulation endpoints for test operations',
+      );
+    const provider = await this.transparentProvider(ctx, dto.provider);
+    this.providerRegistry.assertCapability(
+      provider,
+      ProviderCapability.Refunds,
+    );
+    return this.adapters.verifyRefund(
+      provider,
+      await this.credentials(ctx, provider),
+      dto.reference,
+      dto.currency,
     );
   }
   async payment(ctx: FinancialContext, dto: PaymentDto, key?: string) {
+    if (ctx.environment === 'production')
+      return this.transparentPayment(ctx, dto);
     const scenario = this.scenario(ctx, dto.scenario);
     const created = await this.create(
       ctx,
@@ -496,7 +658,6 @@ export class FinancialService {
       key,
       dto,
       async (manager) => {
-        await this.resource(ctx, dto.customer, 'customer', manager);
         const route = await this.provider(ctx, dto.provider);
         const provider = route.provider;
         if (
@@ -512,7 +673,7 @@ export class FinancialService {
           amount: dto.amount,
           currency: dto.currency,
           provider,
-          parentId: dto.customer,
+          parentId: dto.customer ?? null,
           status:
             ctx.environment === 'sandbox'
               ? this.scenarioStatus(scenario)
@@ -525,59 +686,7 @@ export class FinancialService {
         };
       },
     );
-    if (!created.created || ctx.environment === 'sandbox') return created.item;
-    const item = created.item;
-    if (!item.provider)
-      throw new BadRequestException('Payment provider missing');
-    let providerStartedAt: number | undefined;
-    try {
-      const customer = await this.resource(ctx, dto.customer, 'customer');
-      const email = customer.details.email;
-      if (typeof email !== 'string')
-        throw new BadRequestException('Customer email missing');
-      const provider = item.provider as PaymentProvider;
-      providerStartedAt = Date.now();
-      const result = await this.adapters.create(
-        provider,
-        await this.credentials(ctx, provider),
-        {
-          reference: item.id,
-          amount: dto.amount,
-          currency: dto.currency,
-          email,
-          callbackUrl: dto.callbackUrl,
-        },
-      );
-      if (result.reference !== item.id)
-        throw new BadRequestException('Provider reference mismatch');
-      return this.locked(ctx, async (manager) => {
-        const saved = await this.resource(ctx, item.id, 'payment', manager);
-        saved.details = {
-          ...saved.details,
-          checkoutUrl: result.checkoutUrl,
-          checkoutReference: result.reference,
-          providerLatencyMs: Date.now() - providerStartedAt!,
-        };
-        await manager.save(saved);
-        await this.log(
-          ctx,
-          'payments.create',
-          'provider',
-          { resourceId: item.id, reference: result.reference },
-          manager,
-        );
-        return saved;
-      });
-    } catch (error) {
-      return this.providerFailure(
-        ctx,
-        item.id,
-        error,
-        providerStartedAt === undefined
-          ? undefined
-          : Date.now() - providerStartedAt,
-      );
-    }
+    return created.item;
   }
   private async providerFailure(
     ctx: FinancialContext,
@@ -614,6 +723,10 @@ export class FinancialService {
     });
   }
   async verify(ctx: FinancialContext, id: string) {
+    if (ctx.environment === 'production')
+      throw new GoneException(
+        'Use POST /v1/payments/verify with a provider reference',
+      );
     const item = await this.resource(ctx, id, 'payment');
     if (
       ctx.environment === 'sandbox' ||
@@ -657,6 +770,8 @@ export class FinancialService {
     });
   }
   async refund(ctx: FinancialContext, dto: RefundDto, key?: string) {
+    if (ctx.environment === 'production')
+      return this.transparentRefund(ctx, dto);
     const scenario = this.scenario(ctx, dto.scenario);
     const created = await this.create(
       ctx,
@@ -664,6 +779,8 @@ export class FinancialService {
       key,
       dto,
       async (manager) => {
+        if (!dto.payment)
+          throw new BadRequestException('payment is required in Sandbox');
         const payment = await this.resource(
           ctx,
           dto.payment,
@@ -709,6 +826,8 @@ export class FinancialService {
     );
     if (!created.created || ctx.environment === 'sandbox') return created.item;
     const item = created.item;
+    if (!dto.payment)
+      throw new BadRequestException('payment is required in Sandbox');
     const payment = await this.resource(ctx, dto.payment, 'payment');
     if (
       !item.provider ||
@@ -748,6 +867,10 @@ export class FinancialService {
     }
   }
   async verifyRefund(ctx: FinancialContext, id: string) {
+    if (ctx.environment === 'production')
+      throw new GoneException(
+        'Use POST /v1/refunds/verify with a provider reference',
+      );
     const item = await this.resource(ctx, id, 'refund');
     if (
       ctx.environment === 'sandbox' ||
@@ -791,82 +914,23 @@ export class FinancialService {
     });
   }
   async wallet(ctx: FinancialContext, dto: WalletDto, key?: string) {
-    const walletProvider = dto.provider;
-    if (ctx.environment === 'sandbox' && !dto.currency)
+    if (ctx.environment === 'production')
+      throw new GoneException(
+        'Production wallet orchestration is not available through the stateless provider layer',
+      );
+    if (!dto.currency)
       throw new BadRequestException('Fiat currency is required in Sandbox');
-    if (ctx.environment === 'sandbox' && (dto.provider || dto.chain))
+    if (dto.provider || dto.chain)
       throw new BadRequestException('Provider and chain are production-only');
-    if (ctx.environment === 'production' && !walletProvider)
-      throw new BadRequestException(
-        'Select Turnkey or Privy for a production wallet',
-      );
-    if (ctx.environment === 'production' && !dto.chain)
-      throw new BadRequestException('Select a production wallet chain');
-    if (ctx.environment === 'production' && dto.currency)
-      throw new BadRequestException(
-        'Production chain wallets have no fiat currency or simulated balance',
-      );
-    const walletConfig =
-      ctx.environment === 'production' && walletProvider
-        ? await this.providers.getProviderConfigForProject(
-            ctx.projectId,
-            walletProvider === 'turnkey'
-              ? PROVIDER_TYPE_ENUM.TURNKEY
-              : PROVIDER_TYPE_ENUM.PRIVY,
-            ctx.environment,
-          )
-        : null;
-    const created = await this.create(
-      ctx,
-      'wallets.create',
-      key,
-      dto,
-      async (manager) => {
-        if (dto.customer)
-          await this.resource(ctx, dto.customer, 'customer', manager);
-        return {
-          kind: 'wallet',
-          status: ctx.environment === 'sandbox' ? 'completed' : 'pending',
-          currency: ctx.environment === 'sandbox' ? dto.currency : null,
-          parentId: dto.customer ?? null,
-          provider: walletProvider ?? null,
-          details: {
-            balance: ctx.environment === 'sandbox' ? '0' : null,
-            chain: dto.chain,
-            custody: ctx.environment === 'sandbox' ? 'simulated' : 'provider',
-          },
-        };
-      },
-    );
-    if (!created.created || ctx.environment === 'sandbox') return created.item;
-    const item = created.item;
-    const provider = item.provider as WalletProvider | null;
-    if (!provider) throw new BadRequestException('Wallet provider missing');
-    try {
-      const result = await this.walletAdapters.create(
-        provider,
-        walletConfig ?? {},
-        {
-          reference: item.id,
-          chain: dto.chain!,
-        },
-      );
-      return this.locked(ctx, async (manager) => {
-        const current = await this.resource(ctx, item.id, 'wallet', manager);
-        current.status = 'completed';
-        current.providerReference = result.reference;
-        current.details = {
-          ...current.details,
-          address: result.address,
-          chain: result.chain,
-        };
-        await manager.save(current);
-        await this.emit(manager, current, 'wallet.completed');
-        return current;
-      });
-    } catch (error) {
-      return this.providerFailure(ctx, item.id, error);
-    }
+    const created = await this.create(ctx, 'wallets.create', key, dto, () => ({
+      kind: 'wallet',
+      status: 'completed',
+      currency: dto.currency,
+      parentId: null,
+      provider: null,
+      details: { balance: '0', custody: 'simulated' },
+    }));
+    return created.item;
   }
   async walletOperation(
     ctx: FinancialContext,
@@ -1130,10 +1194,13 @@ export class FinancialService {
     });
   }
   async reconcile(ctx: FinancialContext) {
-    if (ctx.environment !== 'production')
-      throw new BadRequestException(
-        'Provider reconciliation runs in production only',
+    if (ctx.environment === 'production')
+      throw new GoneException(
+        'OurPocket does not retain provider operations for reconciliation',
       );
+    throw new BadRequestException(
+      'Provider reconciliation runs in production only',
+    );
     const resources = await this.db.manager.find(FinancialResource, {
       where: {
         projectId: ctx.projectId,
@@ -1167,7 +1234,7 @@ export class FinancialService {
         await this.log(ctx, 'reconciliation.inspect', 'provider', {
           resourceId: resource.id,
           outcome: 'unresolved',
-          error: error instanceof Error ? error.message : 'Unknown error',
+          error: String(error),
         });
       }
     }
@@ -1184,6 +1251,21 @@ export class FinancialService {
     return run;
   }
   async metrics(ctx: FinancialContext) {
+    if (ctx.environment === 'production')
+      return {
+        totals: {
+          apiRequests: 0,
+          successfulTransactions: 0,
+          failedTransactions: 0,
+          unknownTransactions: 0,
+          activeWallets: 0,
+          transactionVolume: 0,
+          successRate: 0,
+        },
+        providerPerformance: [],
+        monthlyTransactionVolume: [],
+        apiUsage: [],
+      };
     const scope = [ctx.projectId, ctx.environment];
     const resources = await this.db.manager.find(FinancialResource, {
       where: { projectId: ctx.projectId, environment: ctx.environment },
