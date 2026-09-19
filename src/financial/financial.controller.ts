@@ -158,7 +158,7 @@ export class FinancialController {
     @CurrentFinancialContext() ctx: FinancialContext,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.service.resource(ctx, id, 'wallet');
+    return this.service.walletOrLegacy(ctx, id);
   }
   @Get('sandbox/wallets') wallets(
     @CurrentFinancialContext() ctx: FinancialContext,

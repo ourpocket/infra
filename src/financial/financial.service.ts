@@ -11,6 +11,7 @@ import axios from 'axios';
 import { ProjectApiKey } from '../entities/project-api-key.entity';
 import { ProviderCatalog } from '../entities/provider-catalog.entity';
 import { ProjectProvider } from '../entities/project-provider.entity';
+import { Wallet } from '../entities/wallet.entity';
 import { ProjectProviderService } from '../project/project-provider.service';
 import { PROVIDER_TYPE_ENUM, PROVIDER_CATALOG_STATUS_ENUM } from '../enums';
 import {
@@ -95,6 +96,22 @@ export class FinancialService {
     });
     if (!item) throw new NotFoundException('Resource not found');
     return item;
+  }
+  async walletOrLegacy(ctx: FinancialContext, id: string) {
+    const current = await this.db.manager.findOne(FinancialResource, {
+      where: {
+        id,
+        projectId: ctx.projectId,
+        environment: ctx.environment,
+        kind: 'wallet',
+      },
+    });
+    if (current) return current;
+    const legacy = await this.db.manager.findOne(Wallet, {
+      where: { id, project: { id: ctx.projectId } },
+    });
+    if (!legacy) throw new NotFoundException('Wallet not found');
+    return { wallet: legacy, balance: null, environment: 'legacy' as const };
   }
   list(ctx: FinancialContext, kind?: ResourceKind | ResourceKind[]) {
     return this.db.manager.find(FinancialResource, {
