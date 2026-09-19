@@ -34,14 +34,17 @@ export class WalletProviderService {
   ];
 
   getAvailableProviders(): WalletProvider[] {
-    return this.providers.filter(
-      (p) => p.isActive && this.supportedProviderTypes.includes(p.type),
-    );
+    return this.providers
+      .filter((p) => p.isActive && this.supportedProviderTypes.includes(p.type))
+      .map((provider) => ({ ...provider, config: { apiKey: '********' } }));
   }
 
   getProvider(type: ProviderType): WalletProvider | undefined {
     this.assertSupportedProvider(type);
-    return this.providers.find((p) => p.type === type && p.isActive);
+    const provider = this.providers.find((p) => p.type === type && p.isActive);
+    return provider
+      ? { ...provider, config: { apiKey: '********' } }
+      : undefined;
   }
 
   addProvider(type: ProviderType, config: ProviderConfig): WalletProvider {
@@ -50,7 +53,7 @@ export class WalletProviderService {
     if (existing) {
       existing.isActive = true;
       existing.config = config;
-      return existing;
+      return { ...existing, config: { apiKey: '********' } };
     }
     const provider: WalletProvider = {
       type,
@@ -59,7 +62,7 @@ export class WalletProviderService {
       config,
     };
     this.providers.push(provider);
-    return provider;
+    return { ...provider, config: { apiKey: '********' } };
   }
 
   removeProvider(type: ProviderType): void {

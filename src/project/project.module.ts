@@ -15,11 +15,13 @@ import { ProjectApiKeyRepository } from './project-api-key.repository';
 import { ProjectProviderRepository } from './project-provider.repository';
 import { PlatformAccountModule } from '../platform-account/platform-account.module';
 import { ProjectApiKeyGuard } from './guards/project-api-key.guard';
+import { ProviderCatalogModule } from '../provider-catalog/provider-catalog.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Project, ProjectApiKey, ProjectProvider]),
     forwardRef(() => PlatformAccountModule),
+    ProviderCatalogModule,
   ],
   controllers: [
     ProjectController,

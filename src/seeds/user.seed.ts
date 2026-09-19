@@ -14,11 +14,13 @@ async function seedUser() {
       name: 'Admin User',
       email: process.env.ADMIN_USER_EMAIL,
       password: process.env.ADMIN_USER_PASSWORD,
+      isPlatformAdmin: true,
     },
     {
       name: 'Normal User',
       email: process.env.NORMAL_USER_EMAIL,
       password: process.env.NORMAL_USER_PASSWORD,
+      isPlatformAdmin: false,
     },
   ];
 
@@ -35,6 +37,10 @@ async function seedUser() {
     });
 
     if (existingUser) {
+      if (existingUser.isPlatformAdmin !== userData.isPlatformAdmin) {
+        existingUser.isPlatformAdmin = userData.isPlatformAdmin;
+        await userRepository.save(existingUser);
+      }
       console.log(`User ${userData.email} already exists`);
       continue;
     }
@@ -48,6 +54,7 @@ async function seedUser() {
       passwordHash: passwordHash,
       provider: AUTH_TYPE_ENUM.LOCAL,
       status: USERS_STATUS_ENUM.ACTIVE,
+      isPlatformAdmin: userData.isPlatformAdmin,
       isEmailVerified: true,
       acceptTerms: true,
     });

@@ -3,6 +3,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { randomBytes, createHash } from 'node:crypto';
+import { ProjectApiKey } from '../entities/project-api-key.entity';
 import { Project } from '../entities/project.entity';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { ProjectRepository } from './project.repository';
@@ -15,7 +17,10 @@ export class ProjectService {
     private readonly platformAccountRepository: PlatformAccountRepository,
   ) {}
 
-  async createProject(userId: string, dto: CreateProjectDto): Promise<Project> {
+  async createProject(
+    userId: string,
+    dto: CreateProjectDto,
+  ): Promise<Project & { sandboxKey: string }> {
     const platformAccount =
       await this.platformAccountRepository.findByUserId(userId);
 
@@ -33,7 +38,21 @@ export class ProjectService {
       platformAccount,
     });
 
-    return this.projectRepository.save(project);
+    return this.projectRepository.manager.transaction(async (manager) => {
+      const saved = await manager.save(project);
+      const raw = randomBytes(32).toString('hex');
+      const key = manager.create(ProjectApiKey, {
+        project: saved,
+        scope: 'test',
+        description: 'Sandbox API key',
+        quota: 1000,
+        used: 0,
+        hashedKey: createHash('sha256').update(raw).digest('hex'),
+        encryptedKey: null,
+      });
+      await manager.save(key);
+      return Object.assign(saved, { sandboxKey: `op_test_sk_${raw}` });
+    });
   }
 
   async listProjectsForUser(userId: string): Promise<Project[]> {

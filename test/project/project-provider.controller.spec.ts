@@ -53,6 +53,7 @@ describe('ProjectProviderController', () => {
         userId,
         projectId,
         dto,
+        'production',
       );
     });
   });
@@ -69,6 +70,7 @@ describe('ProjectProviderController', () => {
       expect(service.listProvidersForProject).toHaveBeenCalledWith(
         userId,
         projectId,
+        undefined,
       );
     });
   });

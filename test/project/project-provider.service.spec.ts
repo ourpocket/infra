@@ -4,15 +4,19 @@ import { ProjectProviderRepository } from '../../src/project/project-provider.re
 import { ProjectRepository } from '../../src/project/project.repository';
 import { NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { PROVIDER_TYPE_ENUM } from '../../src/enums';
+import { ProviderCatalogService } from '../../src/provider-catalog/provider-catalog.service';
 
 describe('ProjectProviderService', () => {
   let service: ProjectProviderService;
   let projectProviderRepository: any;
   let projectRepository: any;
+  let providerCatalogService: any;
 
   beforeEach(async () => {
     projectProviderRepository = {
+      findOne: jest.fn(),
       findByProjectIdAndType: jest.fn(),
+      findByProjectIdAndProviderId: jest.fn(),
       save: jest.fn(),
       create: jest.fn(),
       findAllByProjectId: jest.fn(),
@@ -21,6 +25,10 @@ describe('ProjectProviderService', () => {
 
     projectRepository = {
       findByIdAndUserId: jest.fn(),
+    };
+
+    providerCatalogService = {
+      findConnectable: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -33,6 +41,10 @@ describe('ProjectProviderService', () => {
         {
           provide: ProjectRepository,
           useValue: projectRepository,
+        },
+        {
+          provide: ProviderCatalogService,
+          useValue: providerCatalogService,
         },
       ],
     }).compile();
@@ -64,9 +76,7 @@ describe('ProjectProviderService', () => {
     it('should update existing provider if found', async () => {
       projectRepository.findByIdAndUserId.mockResolvedValue({ id: projectId });
       const existingProvider = { id: 'prov-1', ...dto };
-      projectProviderRepository.findByProjectIdAndType.mockResolvedValue(
-        existingProvider,
-      );
+      projectProviderRepository.findOne.mockResolvedValue(existingProvider);
       projectProviderRepository.save.mockResolvedValue(existingProvider);
 
       const result = await service.configureProvider(userId, projectId, dto);
@@ -90,7 +100,7 @@ describe('ProjectProviderService', () => {
 
     it('should create new provider if not found', async () => {
       projectRepository.findByIdAndUserId.mockResolvedValue({ id: projectId });
-      projectProviderRepository.findByProjectIdAndType.mockResolvedValue(null);
+      projectProviderRepository.findOne.mockResolvedValue(null);
       const newProvider = { id: 'prov-2', ...dto };
       projectProviderRepository.create.mockReturnValue(newProvider);
       projectProviderRepository.save.mockResolvedValue(newProvider);
@@ -113,6 +123,83 @@ describe('ProjectProviderService', () => {
         }),
       );
       expect(projectProviderRepository.save).toHaveBeenCalled();
+    });
+  });
+
+  describe('connectProvider', () => {
+    const userId = 'user-id';
+    const projectId = 'project-id';
+    const dto = {
+      providerId: 'catalog-provider-id',
+      config: { apiKey: 'sk_test_123' },
+    };
+
+    it('should create a connection for an active, supported catalog provider', async () => {
+      const project = { id: projectId };
+      const catalogProvider = {
+        id: dto.providerId,
+        adapterType: PROVIDER_TYPE_ENUM.PAYSTACK,
+        credentialFields: [
+          {
+            key: 'apiKey',
+            label: 'Secret key',
+            type: 'secret',
+            required: true,
+          },
+        ],
+      };
+      const createdProvider = {
+        id: 'project-provider-id',
+        project,
+        provider: catalogProvider,
+        providerCatalogId: dto.providerId,
+        type: PROVIDER_TYPE_ENUM.PAYSTACK,
+        config: dto.config,
+        isActive: true,
+      };
+
+      projectRepository.findByIdAndUserId.mockResolvedValue(project);
+      providerCatalogService.findConnectable.mockResolvedValue(catalogProvider);
+      projectProviderRepository.findOne.mockResolvedValue(null);
+      projectProviderRepository.create.mockReturnValue(createdProvider);
+      projectProviderRepository.save.mockResolvedValue(createdProvider);
+
+      const result = await service.connectProvider(userId, projectId, dto);
+
+      expect(projectProviderRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          providerCatalogId: dto.providerId,
+          type: PROVIDER_TYPE_ENUM.PAYSTACK,
+          config: expect.objectContaining({ encrypted: true }),
+        }),
+      );
+      expect(result).toEqual({
+        ...createdProvider,
+        config: { apiKey: 'sk_t********_123' },
+      });
+    });
+
+    it('should reject a connection with a missing required credential', async () => {
+      projectRepository.findByIdAndUserId.mockResolvedValue({ id: projectId });
+      providerCatalogService.findConnectable.mockResolvedValue({
+        id: dto.providerId,
+        adapterType: PROVIDER_TYPE_ENUM.PAYSTACK,
+        credentialFields: [
+          {
+            key: 'apiKey',
+            label: 'Secret key',
+            type: 'secret',
+            required: true,
+          },
+        ],
+      });
+
+      await expect(
+        service.connectProvider(userId, projectId, {
+          providerId: dto.providerId,
+          config: {},
+        }),
+      ).rejects.toThrow(UnauthorizedException);
     });
   });
 

@@ -77,7 +77,7 @@ export class ProjectApiKeyService {
       expiresAt: dto.expiresAt,
       quota: dto.quota ?? 1000,
       hashedKey,
-      encryptedKey: this.encryptApiKey(prefixedRawKey),
+      encryptedKey: null,
     });
 
     const savedApiKey = await this.projectApiKeyRepository.save(apiKey);
@@ -112,16 +112,6 @@ export class ProjectApiKeyService {
       throw new UnauthorizedException('Invalid project API key scope');
     }
 
-    const used = matchedKey.used ?? 0;
-    const quota = matchedKey.quota ?? Number.MAX_SAFE_INTEGER;
-
-    if (used >= quota) {
-      throw new UnauthorizedException('Project API key quota exceeded');
-    }
-
-    matchedKey.used = used + 1;
-    await this.projectApiKeyRepository.save(matchedKey);
-
     return matchedKey;
   }
 
@@ -144,6 +134,40 @@ export class ProjectApiKeyService {
     await this.projectApiKeyRepository.remove(apiKey);
   }
 
+  async rotateProjectApiKey(
+    userId: string,
+    projectId: string,
+    apiKeyId: string,
+  ): Promise<ProjectApiKeyResponse> {
+    const owned =
+      await this.projectApiKeyRepository.findByIdAndProjectIdAndUserId(
+        apiKeyId,
+        projectId,
+        userId,
+      );
+    if (!owned) throw new NotFoundException('Project API key not found');
+    return this.projectApiKeyRepository.manager.transaction(async (manager) => {
+      const key = await manager.findOne(ProjectApiKey, {
+        where: { id: apiKeyId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!key) throw new NotFoundException('Project API key not found');
+      const { rawKey, hashedKey } = generateApiKey(32);
+      key.hashedKey = hashedKey;
+      key.encryptedKey = null;
+      key.used = 0;
+      await manager.save(key);
+      return {
+        id: key.id,
+        rawKey: `${PROJECT_API_KEY_PREFIX[key.scope]}${rawKey}`,
+        scope: key.scope,
+        description: key.description ?? undefined,
+        expiresAt: key.expiresAt ?? undefined,
+        createdAt: key.createdAt,
+      };
+    });
+  }
+
   async getProjectApiKeys(
     userId: string,
     projectId: string,
@@ -161,80 +185,10 @@ export class ProjectApiKeyService {
       project.id,
     );
 
-    return apiKeys.map(({ hashedKey, encryptedKey, ...rest }) => {
-      const rawKey = this.decryptApiKey(encryptedKey);
-
-      return {
-        ...rest,
-        rawKey,
-        keyPreview: rawKey
-          ? this.maskApiKey(rawKey)
-          : `${PROJECT_API_KEY_PREFIX[rest.scope]}********`,
-      };
-    });
-  }
-
-  private encryptApiKey(rawKey: string): string {
-    const iv = crypto.randomBytes(12);
-    const cipher = crypto.createCipheriv(
-      'aes-256-gcm',
-      this.getEncryptionKey(),
-      iv,
-    );
-    const encrypted = Buffer.concat([
-      cipher.update(rawKey, 'utf8'),
-      cipher.final(),
-    ]);
-    const tag = cipher.getAuthTag();
-
-    return [
-      iv.toString('base64'),
-      tag.toString('base64'),
-      encrypted.toString('base64'),
-    ].join('.');
-  }
-
-  private decryptApiKey(encryptedKey?: string | null): string | undefined {
-    if (!encryptedKey) {
-      return undefined;
-    }
-
-    try {
-      const [ivValue, tagValue, encryptedValue] = encryptedKey.split('.');
-      if (!ivValue || !tagValue || !encryptedValue) {
-        return undefined;
-      }
-
-      const decipher = crypto.createDecipheriv(
-        'aes-256-gcm',
-        this.getEncryptionKey(),
-        Buffer.from(ivValue, 'base64'),
-      );
-      decipher.setAuthTag(Buffer.from(tagValue, 'base64'));
-
-      return Buffer.concat([
-        decipher.update(Buffer.from(encryptedValue, 'base64')),
-        decipher.final(),
-      ]).toString('utf8');
-    } catch {
-      return undefined;
-    }
-  }
-
-  private getEncryptionKey(): Buffer {
-    const secret =
-      process.env.PROJECT_API_KEY_ENCRYPTION_SECRET ??
-      process.env.JWT_SECRET ??
-      process.env.APP_SECRET ??
-      'ourpocket-local-project-api-key-secret';
-
-    return crypto.createHash('sha256').update(secret).digest();
-  }
-
-  private maskApiKey(apiKey: string): string {
-    return apiKey.length > 18
-      ? `${apiKey.slice(0, 14)}${'*'.repeat(8)}`
-      : apiKey;
+    return apiKeys.map(({ hashedKey, encryptedKey, ...rest }) => ({
+      ...rest,
+      keyPreview: `${PROJECT_API_KEY_PREFIX[rest.scope]}********`,
+    }));
   }
 
   private extractRawKey(incomingKey: string): {

@@ -88,43 +88,11 @@ export class RoutingEngineService {
     action: WALLET_ACTION_ENUM,
     payload: WalletOperationPayload,
   ): Promise<unknown> {
-    const provider = this.resolveProvider(route.provider);
-
-    if (action === WALLET_ACTION_ENUM.CREATE_WALLET) {
-      return this.executeProviderCall(() =>
-        provider.createWallet(route.apiKey, payload),
-      );
-    }
-
-    if (action === WALLET_ACTION_ENUM.FETCH_WALLET) {
-      return this.executeProviderCall(() =>
-        provider.fetchWallet(route.apiKey, payload),
-      );
-    }
-
-    if (action === WALLET_ACTION_ENUM.LIST_WALLETS) {
-      return this.executeProviderCall(() =>
-        provider.listWallets(route.apiKey, payload),
-      );
-    }
-
-    if (action === WALLET_ACTION_ENUM.DEPOSIT) {
-      return this.executeLedgerProviderAction(
-        route,
-        payload,
-        (providerPayload) => provider.deposit(route.apiKey, providerPayload),
-      );
-    }
-
-    if (action === WALLET_ACTION_ENUM.WITHDRAW) {
-      return this.executeLedgerProviderAction(
-        route,
-        payload,
-        (providerPayload) => provider.withdraw(route.apiKey, providerPayload),
-      );
-    }
-
-    throw new BadRequestException('Unsupported wallet action');
+    return Promise.reject(
+      new BadRequestException(
+        'Legacy provider wallet actions are unavailable; use normalized /v1/payments or /v1/sandbox/wallets',
+      ),
+    );
   }
 
   private resolveApiKeyForProvider(
@@ -205,48 +173,6 @@ export class RoutingEngineService {
     if (!SUPPORTED_PROVIDERS.includes(provider)) {
       throw new BadRequestException(`${provider} is not supported yet`);
     }
-  }
-
-  private resolveProvider(provider: PROVIDER_TYPE_ENUM): IWalletProvider {
-    switch (provider) {
-      case PROVIDER_TYPE_ENUM.PAYSTACK:
-        return this.paystackService;
-      case PROVIDER_TYPE_ENUM.FLUTTERWAVE:
-        return this.flutterwaveService;
-      default:
-        throw new BadRequestException(`${provider} is not supported yet`);
-    }
-  }
-
-  private async executeLedgerProviderAction(
-    route: ProviderRoute,
-    payload: WalletOperationPayload,
-    operation: (payload: WalletOperationPayload) => Promise<unknown>,
-  ): Promise<unknown> {
-    const { ledger, ...providerPayload } = payload;
-    const providerResponse = await this.executeProviderCall(() =>
-      operation(providerPayload),
-    );
-
-    if (!ledger) {
-      return providerResponse;
-    }
-
-    const ledgerResponse = await this.ledgerService.executeTransaction(ledger);
-
-    return {
-      provider: providerResponse,
-      ledger: ledgerResponse,
-      selectedProvider: route.provider,
-    };
-  }
-
-  private executeProviderCall<T>(operation: () => Promise<T>): Promise<T> {
-    if (this.retryEngineService) {
-      return this.retryEngineService.execute(operation);
-    }
-
-    return operation();
   }
 
   private value(value?: number): number {

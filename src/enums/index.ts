@@ -16,8 +16,37 @@ enum USERS_STATUS_ENUM {
 enum PROVIDER_TYPE_ENUM {
   PAYSTACK = 'paystack',
   FLUTTERWAVE = 'flutterwave',
+  TURNKEY = 'turnkey',
+  PRIVY = 'privy',
   PAGA = 'paga',
   FINGRA = 'fingra',
+}
+
+enum PROVIDER_CATALOG_STATUS_ENUM {
+  DRAFT = 'draft',
+  COMING_SOON = 'coming_soon',
+  ACTIVE = 'active',
+  MAINTENANCE = 'maintenance',
+  RETIRED = 'retired',
+}
+
+enum PROVIDER_CATEGORY_ENUM {
+  AFRICA = 'africa',
+  GLOBAL = 'global',
+  WALLET_INFRASTRUCTURE = 'wallet_infrastructure',
+  DATA_VERIFICATION = 'data_verification',
+}
+
+enum PROVIDER_CAPABILITY_ENUM {
+  PAYMENTS = 'payments',
+  REFUNDS = 'refunds',
+  WALLET_OPERATIONS = 'wallet_operations',
+  PAYMENT_COLLECTION = 'payment_collection',
+  BANK_DATA = 'bank_data',
+  IDENTITY_VERIFICATION = 'identity_verification',
+  TRANSFERS = 'transfers',
+  SIGNING = 'signing',
+  POLICIES = 'policies',
 }
 
 enum PROJECT_API_KEY_SCOPE_ENUM {
@@ -85,6 +114,9 @@ export {
   API_ENVIROMENT,
   USERS_STATUS_ENUM,
   PROVIDER_TYPE_ENUM,
+  PROVIDER_CATALOG_STATUS_ENUM,
+  PROVIDER_CATEGORY_ENUM,
+  PROVIDER_CAPABILITY_ENUM,
   PROJECT_API_KEY_SCOPE_ENUM,
   ROUTING_STRATEGY_ENUM,
   WALLET_ACTION_ENUM,

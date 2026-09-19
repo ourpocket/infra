@@ -5,7 +5,7 @@ OurPocket Infra is a NestJS backend for authentication, platform/project managem
 ## Base URL
 
 - Local: `http://localhost:3000`
-- Swagger: `http://localhost:3000/api-doc`
+- Swagger: `http://localhost:3000/docs`
 - Versioned routes: `http://localhost:3000/v1/...`
 
 ## Response Shape
@@ -384,3 +384,7 @@ pnpm run test:e2e
 ## Note
 
 Open implementation work is tracked in `OPEN_ISSUES.md`.
+
+## Financial MVP
+
+Runbook, migration order, secrets, Redis worker setup, compatibility behavior, and verification are documented in [`docs/financial-mvp.md`](docs/financial-mvp.md).

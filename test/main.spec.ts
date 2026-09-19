@@ -50,7 +50,9 @@ describe('main bootstrap', () => {
     const { bootstrap } = await import('../src/main');
     await bootstrap();
 
-    expect((NestFactory as any).create).toHaveBeenCalledWith(AppModule);
+    expect((NestFactory as any).create).toHaveBeenCalledWith(AppModule, {
+      rawBody: true,
+    });
     expect(appMock.enableCors).toHaveBeenCalledWith({ origin: '*' });
     expect(appMock.enableVersioning).toHaveBeenCalled();
     expect(appMock.useGlobalPipes).toHaveBeenCalled();

@@ -48,10 +48,13 @@ describe('WalletProviderService', () => {
       const config = { apiKey: 'new-key' };
       const provider = service.addProvider(PROVIDER_TYPE_ENUM.PAYSTACK, config);
 
-      expect(provider.config).toEqual(config);
-      expect(service.getProvider(PROVIDER_TYPE_ENUM.PAYSTACK)?.config).toEqual(
-        config,
+      expect(provider.config).toEqual({ apiKey: '********' });
+      expect(JSON.stringify(service.getAvailableProviders())).not.toContain(
+        'new-key',
       );
+      expect(service.getProvider(PROVIDER_TYPE_ENUM.PAYSTACK)?.config).toEqual({
+        apiKey: '********',
+      });
     });
 
     it('should reject unsupported providers', () => {

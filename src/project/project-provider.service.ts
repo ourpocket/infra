@@ -9,6 +9,8 @@ import { PROVIDER_TYPE_ENUM, ROUTING_STRATEGY_ENUM } from '../enums';
 import { ConfigureProjectProviderDto } from './dto/configure-project-provider.dto';
 import { ProjectProviderRepository } from './project-provider.repository';
 import { ProjectRepository } from './project.repository';
+import { ProviderCatalogService } from '../provider-catalog/provider-catalog.service';
+import { ConnectProjectProviderDto } from './dto/connect-project-provider.dto';
 
 interface EncryptedProviderConfig {
   encrypted: true;
@@ -22,12 +24,14 @@ export class ProjectProviderService {
   constructor(
     private readonly projectProviderRepository: ProjectProviderRepository,
     private readonly projectRepository: ProjectRepository,
+    private readonly providerCatalogService: ProviderCatalogService,
   ) {}
 
-  async configureProvider(
+  async connectProvider(
     userId: string,
     projectId: string,
-    dto: ConfigureProjectProviderDto,
+    dto: ConnectProjectProviderDto,
+    environment: 'sandbox' | 'production' = 'production',
   ): Promise<ProjectProvider> {
     const project = await this.projectRepository.findByIdAndUserId(
       projectId,
@@ -38,13 +42,26 @@ export class ProjectProviderService {
       throw new NotFoundException('Project not found');
     }
 
-    const existing =
-      await this.projectProviderRepository.findByProjectIdAndType(
-        projectId,
-        dto.type,
-      );
+    const catalogProvider = await this.providerCatalogService.findConnectable(
+      dto.providerId,
+    );
+    this.assertRequiredConnectionFields(
+      catalogProvider.credentialFields,
+      dto.config,
+    );
+
+    const existing = await this.projectProviderRepository.findOne({
+      where: {
+        project: { id: projectId },
+        type: catalogProvider.adapterType,
+        environment,
+      },
+    });
 
     if (existing) {
+      existing.providerCatalogId = catalogProvider.id;
+      existing.provider = catalogProvider;
+      existing.environment = environment;
       existing.config = this.encryptConfig(dto.config);
       existing.isActive = dto.isActive ?? true;
       const saved = await this.projectProviderRepository.save(existing);
@@ -53,6 +70,66 @@ export class ProjectProviderService {
 
     const provider = this.projectProviderRepository.create({
       project,
+      environment,
+      provider: catalogProvider,
+      providerCatalogId: catalogProvider.id,
+      type: catalogProvider.adapterType,
+      config: this.encryptConfig(dto.config),
+      isActive: dto.isActive ?? true,
+    });
+
+    const saved = await this.projectProviderRepository.save(provider);
+    return this.sanitizeProvider(saved);
+  }
+
+  async configureProvider(
+    userId: string,
+    projectId: string,
+    dto: ConfigureProjectProviderDto,
+    environment: 'sandbox' | 'production' = 'production',
+  ): Promise<ProjectProvider> {
+    const project = await this.projectRepository.findByIdAndUserId(
+      projectId,
+      userId,
+    );
+
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
+
+    if (
+      ![PROVIDER_TYPE_ENUM.PAYSTACK, PROVIDER_TYPE_ENUM.FLUTTERWAVE].includes(
+        dto.type,
+      )
+    )
+      throw new UnauthorizedException(
+        'Provider is not available for financial operations',
+      );
+    if (
+      dto.type === PROVIDER_TYPE_ENUM.FLUTTERWAVE &&
+      (typeof dto.config.webhookSecret !== 'string' ||
+        !dto.config.webhookSecret.trim())
+    )
+      throw new UnauthorizedException('Provider webhook secret is required');
+    if (typeof dto.config.apiKey !== 'string' || !dto.config.apiKey.trim())
+      throw new UnauthorizedException('Provider API key is required');
+    const existing = await this.projectProviderRepository.findOne({
+      where: { project: { id: projectId }, type: dto.type, environment },
+    });
+
+    if (existing) {
+      existing.providerCatalogId = null;
+      existing.provider = null;
+      existing.environment = environment;
+      existing.config = this.encryptConfig(dto.config);
+      existing.isActive = dto.isActive ?? true;
+      const saved = await this.projectProviderRepository.save(existing);
+      return this.sanitizeProvider(saved);
+    }
+
+    const provider = this.projectProviderRepository.create({
+      project,
+      environment,
       type: dto.type,
       config: this.encryptConfig(dto.config),
       isActive: dto.isActive ?? true,
@@ -65,6 +142,7 @@ export class ProjectProviderService {
   async listProvidersForProject(
     userId: string,
     projectId: string,
+    environment?: 'sandbox' | 'production',
   ): Promise<ProjectProvider[]> {
     const project = await this.projectRepository.findByIdAndUserId(
       projectId,
@@ -78,7 +156,11 @@ export class ProjectProviderService {
     const providers =
       await this.projectProviderRepository.findAllByProjectId(projectId);
 
-    return providers.map((provider) => this.sanitizeProvider(provider));
+    return providers
+      .filter(
+        (provider) => !environment || provider.environment === environment,
+      )
+      .map((provider) => this.sanitizeProvider(provider));
   }
 
   async findActiveProviderForProject(
@@ -160,9 +242,13 @@ export class ProjectProviderService {
   async getProviderApiKeyForProject(
     projectId: string,
     type: PROVIDER_TYPE_ENUM,
+    environment?: 'sandbox' | 'production',
   ): Promise<string> {
-    const provider = await this.findActiveProviderForProject(projectId, type);
-    const config = this.decryptConfig(provider.config);
+    const config = await this.getProviderConfigForProject(
+      projectId,
+      type,
+      environment,
+    );
     const apiKey = config.apiKey;
 
     if (!apiKey || typeof apiKey !== 'string') {
@@ -170,6 +256,33 @@ export class ProjectProviderService {
     }
 
     return apiKey;
+  }
+
+  async getProviderConfigForProject(
+    projectId: string,
+    type: PROVIDER_TYPE_ENUM,
+    environment?: 'sandbox' | 'production',
+  ): Promise<Record<string, unknown>> {
+    const provider = environment
+      ? await this.projectProviderRepository.findOne({
+          where: {
+            project: { id: projectId },
+            type,
+            environment,
+            isActive: true,
+          },
+        })
+      : await this.findActiveProviderForProject(projectId, type);
+    if (!provider)
+      throw new NotFoundException('Provider not connected in environment');
+    if (
+      environment &&
+      (!provider.config || !this.isEncryptedConfig(provider.config))
+    )
+      throw new UnauthorizedException(
+        'Reconnect the provider using an encrypted environment connection',
+      );
+    return this.decryptConfig(provider.config);
   }
 
   private encryptConfig(
@@ -223,8 +336,29 @@ export class ProjectProviderService {
   private sanitizeProvider(provider: ProjectProvider): ProjectProvider {
     return {
       ...provider,
-      config: this.maskConfig(this.decryptConfig(provider.config)),
+      config:
+        provider.environment == null &&
+        provider.config &&
+        this.isEncryptedConfig(provider.config)
+          ? { legacy: 'Reconnect this provider in an explicit environment' }
+          : this.maskConfig(this.decryptConfig(provider.config)),
     };
+  }
+
+  private assertRequiredConnectionFields(
+    fields: Array<{ key: string; required: boolean }>,
+    config: Record<string, unknown>,
+  ): void {
+    for (const field of fields) {
+      if (!field.required) {
+        continue;
+      }
+
+      const value = config[field.key];
+      if (typeof value !== 'string' || !value.trim()) {
+        throw new UnauthorizedException(`${field.key} is required`);
+      }
+    }
   }
 
   private maskConfig(config: Record<string, any>): Record<string, any> {
@@ -274,12 +408,19 @@ export class ProjectProviderService {
   }
 
   private getEncryptionKey(): Buffer {
+    if (
+      !process.env.PROVIDER_CONFIG_ENCRYPTION_KEY &&
+      process.env.NODE_ENV === 'production'
+    )
+      throw new UnauthorizedException(
+        'PROVIDER_CONFIG_ENCRYPTION_KEY is required in production',
+      );
+    const configuredSecret =
+      process.env.PROVIDER_CONFIG_ENCRYPTION_KEY || process.env.JWT_SECRET;
     return crypto
       .createHash('sha256')
       .update(
-        process.env.PROVIDER_CONFIG_ENCRYPTION_KEY ||
-          process.env.JWT_SECRET ||
-          'ourpocket-provider-config-development-secret',
+        configuredSecret || 'ourpocket-provider-config-development-secret',
       )
       .digest();
   }

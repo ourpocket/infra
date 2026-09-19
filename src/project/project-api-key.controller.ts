@@ -61,6 +61,18 @@ export class ProjectApiKeyController {
     return this.projectApiKeyService.getProjectApiKeys(userId, projectId);
   }
 
+  @Post(':id/rotate')
+  @ApiOperation({
+    summary: 'Rotate a project key and return its replacement once',
+  })
+  rotateProjectApiKey(
+    @CurrentUser('userId') userId: string,
+    @Param('projectId') projectId: string,
+    @Param('id') id: string,
+  ) {
+    return this.projectApiKeyService.rotateProjectApiKey(userId, projectId, id);
+  }
+
   @Delete(':id')
   @ApiOperation({
     summary: 'Revoke a project API key',

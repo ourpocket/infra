@@ -1,5 +1,6 @@
 import {
   Injectable,
+  BadRequestException,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -29,36 +30,9 @@ export class WalletsService {
     const projectApiKey =
       await this.projectApiKeyService.verifyProjectApiKey(incomingApiKey);
 
-    const wallet = this.walletRepository.create({
-      project: projectApiKey.project,
-      account: null,
-      currency: (dto.currency ?? 'NGN').toUpperCase(),
-    });
-
-    const savedWallet = await this.walletRepository.save(wallet);
-    const providerRoute = this.routingEngineService.resolveProviderRoute(dto);
-
-    if (!providerRoute) {
-      return savedWallet;
-    }
-
-    const providerResponse =
-      await this.routingEngineService.executeProviderAction(
-        providerRoute,
-        WALLET_ACTION_ENUM.CREATE_WALLET,
-        {
-          ...(dto.providerPayload ?? {}),
-          userId: dto.userId,
-          walletId: savedWallet.id,
-          currency: savedWallet.currency,
-        },
-      );
-
-    return {
-      wallet: savedWallet,
-      selectedProvider: providerRoute.provider,
-      provider: providerResponse,
-    };
+    throw new BadRequestException(
+      'Use /v1/sandbox/wallets for test wallets; production wallet creation is unavailable',
+    );
   }
 
   async getWallet(incomingApiKey: string, walletId: string): Promise<unknown> {
@@ -73,198 +47,39 @@ export class WalletsService {
       throw new NotFoundException('Wallet not found');
     }
 
-    const balance = await this.ledgerService.getWalletBalance(
-      projectApiKey.project.id,
-      wallet.id,
-    );
-
-    return {
-      wallet,
-      balance,
-    };
+    return { wallet, balance: null, environment: 'legacy' };
   }
 
   async transfer(
     incomingApiKey: string,
     dto: TransferRequestDto,
   ): Promise<unknown> {
-    const projectApiKey =
-      await this.projectApiKeyService.verifyProjectApiKey(incomingApiKey);
-    const projectId = projectApiKey.project.id;
-
-    const fromWallet =
-      await this.walletRepository.findByIdAndProjectIdWithoutRelations(
-        dto.fromWalletId,
-        projectId,
-      );
-    const toWallet =
-      await this.walletRepository.findByIdAndProjectIdWithoutRelations(
-        dto.toWalletId,
-        projectId,
-      );
-
-    if (!fromWallet || !toWallet) {
-      throw new NotFoundException('Wallet not found');
-    }
-
-    const currency = dto.currency.toUpperCase();
-    if (fromWallet.currency !== currency || toWallet.currency !== currency) {
-      throw new UnauthorizedException('Wallet currency mismatch');
-    }
-
-    return this.ledgerService.executeTransaction({
-      projectId,
-      reference: dto.reference,
-      type: 'transfer',
-      metadata: dto.metadata,
-      entries: [
-        {
-          walletId: dto.fromWalletId,
-          amount: dto.amount,
-          entryType: 'debit',
-        },
-        {
-          walletId: dto.toWalletId,
-          amount: dto.amount,
-          entryType: 'credit',
-        },
-      ],
-    });
+    return Promise.reject(
+      new BadRequestException(
+        'Legacy wallet writes are unavailable; use environment-scoped sandbox financial APIs',
+      ),
+    );
   }
 
   async credit(
     incomingApiKey: string,
     dto: CreditWalletRequestDto,
   ): Promise<unknown> {
-    const projectApiKey =
-      await this.projectApiKeyService.verifyProjectApiKey(incomingApiKey);
-    const projectId = projectApiKey.project.id;
-
-    const wallet =
-      await this.walletRepository.findByIdAndProjectIdWithoutRelations(
-        dto.walletId,
-        projectId,
-      );
-
-    if (!wallet) {
-      throw new NotFoundException('Wallet not found');
-    }
-
-    if (wallet.currency !== dto.currency.toUpperCase()) {
-      throw new UnauthorizedException('Wallet currency mismatch');
-    }
-
-    const providerRoute = this.routingEngineService.resolveProviderRoute(dto);
-
-    if (!providerRoute) {
-      return this.ledgerService.executeTransaction({
-        projectId,
-        reference: dto.reference,
-        type: 'credit',
-        metadata: dto.metadata,
-        entries: [
-          {
-            walletId: dto.walletId,
-            amount: dto.amount,
-            entryType: 'credit',
-          },
-        ],
-      });
-    }
-
-    const providerResponse =
-      await this.routingEngineService.executeProviderAction(
-        providerRoute,
-        WALLET_ACTION_ENUM.DEPOSIT,
-        {
-          ...(dto.providerPayload ?? {}),
-          ledger: {
-            projectId,
-            reference: dto.reference,
-            type: 'credit',
-            metadata: dto.metadata,
-            entries: [
-              {
-                walletId: dto.walletId,
-                amount: dto.amount,
-                entryType: 'credit',
-              },
-            ],
-          },
-        },
-      );
-
-    return {
-      selectedProvider: providerRoute.provider,
-      result: providerResponse,
-    };
+    return Promise.reject(
+      new BadRequestException(
+        'Legacy wallet writes are unavailable; use environment-scoped sandbox financial APIs',
+      ),
+    );
   }
 
   async debit(
     incomingApiKey: string,
     dto: DebitWalletRequestDto,
   ): Promise<unknown> {
-    const projectApiKey =
-      await this.projectApiKeyService.verifyProjectApiKey(incomingApiKey);
-    const projectId = projectApiKey.project.id;
-
-    const wallet =
-      await this.walletRepository.findByIdAndProjectIdWithoutRelations(
-        dto.walletId,
-        projectId,
-      );
-
-    if (!wallet) {
-      throw new NotFoundException('Wallet not found');
-    }
-
-    if (wallet.currency !== dto.currency.toUpperCase()) {
-      throw new UnauthorizedException('Wallet currency mismatch');
-    }
-
-    const providerRoute = this.routingEngineService.resolveProviderRoute(dto);
-
-    if (!providerRoute) {
-      return this.ledgerService.executeTransaction({
-        projectId,
-        reference: dto.reference,
-        type: 'debit',
-        metadata: dto.metadata,
-        entries: [
-          {
-            walletId: dto.walletId,
-            amount: dto.amount,
-            entryType: 'debit',
-          },
-        ],
-      });
-    }
-
-    const providerResponse =
-      await this.routingEngineService.executeProviderAction(
-        providerRoute,
-        WALLET_ACTION_ENUM.WITHDRAW,
-        {
-          ...(dto.providerPayload ?? {}),
-          ledger: {
-            projectId,
-            reference: dto.reference,
-            type: 'debit',
-            metadata: dto.metadata,
-            entries: [
-              {
-                walletId: dto.walletId,
-                amount: dto.amount,
-                entryType: 'debit',
-              },
-            ],
-          },
-        },
-      );
-
-    return {
-      selectedProvider: providerRoute.provider,
-      result: providerResponse,
-    };
+    return Promise.reject(
+      new BadRequestException(
+        'Legacy wallet writes are unavailable; use environment-scoped sandbox financial APIs',
+      ),
+    );
   }
 }
