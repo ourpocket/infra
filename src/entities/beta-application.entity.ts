@@ -15,15 +15,15 @@ export class BetaApplication {
   @Column({ type: 'varchar', length: 254 })
   email!: string;
 
-  @Column({ type: 'varchar', length: 160, nullable: true })
+  @Column({ name: 'company_name', type: 'varchar', length: 160, nullable: true })
   companyName?: string | null;
 
-  @Column({ type: 'varchar', length: 80 })
+  @Column({ name: 'use_case', type: 'varchar', length: 80 })
   useCase!: string;
 
   @Column({ type: 'varchar', length: 32, default: 'received' })
   status!: 'received' | 'invited' | 'declined';
 
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 }
