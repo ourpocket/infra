@@ -24,6 +24,7 @@ const environmentSchema = z
     MAX_FILE_SIZE: z.coerce.number().int().positive().default(10_485_760),
     RATE_LIMIT_TTL: z.coerce.number().int().positive().default(60),
     RATE_LIMIT_LIMIT: z.coerce.number().int().positive().default(100),
+    BETA_ACCESS_ONLY: z.enum(['true', 'false']).default('true'),
   })
   .passthrough()
   .superRefine((environment, context) => {

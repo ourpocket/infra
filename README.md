@@ -59,6 +59,8 @@ Base path: `/v1/auth`
 
 ### POST `/v1/auth/register`
 
+Public registration is controlled by `BETA_ACCESS_ONLY`. It defaults to `true`, which returns `403` for registration while preserving sign-in for existing testers. Set it to `false` only when public registration is ready to open.
+
 Request (local):
 
 ```json
