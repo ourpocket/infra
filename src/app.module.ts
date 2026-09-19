@@ -24,6 +24,7 @@ import { WebhooksModule } from './webhooks/webhooks.module';
 import { UsageModule } from './usage/usage.module';
 import { ProviderCatalogModule } from './provider-catalog/provider-catalog.module';
 import { HealthModule } from './health/health.module';
+import { BetaModule } from './beta/beta.module';
 
 const TypeORMConfigModule = TypeOrmModule.forRootAsync({
   imports: [NestConfigModule],
@@ -49,6 +50,7 @@ const TypeORMConfigModule = TypeOrmModule.forRootAsync({
     UsageModule,
     ProviderCatalogModule,
     HealthModule,
+    BetaModule,
     ThrottlerModule.forRoot({
       throttlers: [
         {
