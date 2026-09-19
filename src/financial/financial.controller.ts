@@ -36,6 +36,7 @@ import {
   SimulationDto,
   TransferDto,
   WalletDto,
+  RoutingPolicyDto,
 } from './financial.dto';
 import {
   CurrentFinancialContext,
@@ -138,6 +139,24 @@ export class FinancialController {
   ) {
     return this.service.wallet(ctx, dto, key);
   }
+  @Post('wallets') normalizedWallet(
+    @CurrentFinancialContext() ctx: FinancialContext,
+    @Body() dto: WalletDto,
+    @Headers('idempotency-key') key?: string,
+  ) {
+    return this.service.wallet(ctx, dto, key);
+  }
+  @Get('wallets') normalizedWallets(
+    @CurrentFinancialContext() ctx: FinancialContext,
+  ) {
+    return this.service.list(ctx, 'wallet');
+  }
+  @Get('wallets/:id') normalizedWalletDetail(
+    @CurrentFinancialContext() ctx: FinancialContext,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.service.resource(ctx, id, 'wallet');
+  }
   @Get('sandbox/wallets') wallets(
     @CurrentFinancialContext() ctx: FinancialContext,
   ) {
@@ -195,6 +214,32 @@ export class FinancialController {
   @Get('api-logs') logs(@CurrentFinancialContext() ctx: FinancialContext) {
     return this.service.logs(ctx);
   }
+  @Get('routing-policy') routingPolicy(
+    @CurrentFinancialContext() ctx: FinancialContext,
+  ) {
+    return this.service.routingPolicy(ctx);
+  }
+  @Post('routing-policy') saveRoutingPolicy(
+    @CurrentFinancialContext() ctx: FinancialContext,
+    @Body() dto: RoutingPolicyDto,
+  ) {
+    return this.service.saveRoutingPolicy(ctx, dto);
+  }
+  @Get('provider-health') providerHealth(
+    @CurrentFinancialContext() ctx: FinancialContext,
+  ) {
+    return this.service.providerHealth(ctx);
+  }
+  @Get('reconciliation') reconciliation(
+    @CurrentFinancialContext() ctx: FinancialContext,
+  ) {
+    return this.service.reconciliationRuns(ctx);
+  }
+  @Post('reconciliation') reconcile(
+    @CurrentFinancialContext() ctx: FinancialContext,
+  ) {
+    return this.service.reconcile(ctx);
+  }
   @Get('financial-context') context(
     @CurrentFinancialContext() ctx: FinancialContext,
   ) {
@@ -205,6 +250,9 @@ export class FinancialController {
       const eligible =
         provider.status === PROVIDER_CATALOG_STATUS_ENUM.ACTIVE &&
         ['paystack', 'flutterwave'].includes(provider.slug);
+      const walletEligible =
+        provider.status === PROVIDER_CATALOG_STATUS_ENUM.ACTIVE &&
+        ['turnkey', 'privy'].includes(provider.slug);
       return {
         id: provider.id,
         name: provider.slug,
@@ -212,8 +260,8 @@ export class FinancialController {
         capabilities: {
           payments: eligible,
           refunds: eligible,
-          wallets: false,
-          transfers: false,
+          wallets: walletEligible,
+          transfers: provider.capabilities.includes('transfers' as never),
         },
       };
     });
@@ -247,6 +295,32 @@ export class FinancialDashboardController {
   }
   @Get('metrics') metrics(@CurrentFinancialContext() ctx: FinancialContext) {
     return this.service.metrics(ctx);
+  }
+  @Get('routing-policy') routingPolicy(
+    @CurrentFinancialContext() ctx: FinancialContext,
+  ) {
+    return this.service.routingPolicy(ctx);
+  }
+  @Post('routing-policy') saveRoutingPolicy(
+    @CurrentFinancialContext() ctx: FinancialContext,
+    @Body() dto: RoutingPolicyDto,
+  ) {
+    return this.service.saveRoutingPolicy(ctx, dto);
+  }
+  @Get('provider-health') providerHealth(
+    @CurrentFinancialContext() ctx: FinancialContext,
+  ) {
+    return this.service.providerHealth(ctx);
+  }
+  @Get('reconciliation') reconciliationRuns(
+    @CurrentFinancialContext() ctx: FinancialContext,
+  ) {
+    return this.service.reconciliationRuns(ctx);
+  }
+  @Post('reconciliation') reconcile(
+    @CurrentFinancialContext() ctx: FinancialContext,
+  ) {
+    return this.service.reconcile(ctx);
   }
   @Get('logs') logs(@CurrentFinancialContext() ctx: FinancialContext) {
     return this.service.logs(ctx);

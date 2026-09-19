@@ -43,6 +43,7 @@ import { FinancialWebhooksService } from '../../src/financial/financial-webhooks
 import { InitialSchema20260101000000 } from '../../src/migrations/20260101000000-InitialSchema';
 import { ProviderCatalog20260918000000 } from '../../src/migrations/20260918000000-ProviderCatalog';
 import { FinancialInfrastructure20260919000000 } from '../../src/migrations/20260919000000-FinancialInfrastructure';
+import { FinancialControlPlane20260920000000 } from '../../src/migrations/20260920000000-FinancialControlPlane';
 import { ResponseInterceptor } from '../../src/common/interceptors/response.interceptor';
 const database = process.env.TEST_DATABASE_NAME;
 const suite = database ? describe : describe.skip;
@@ -134,6 +135,7 @@ suite('Financial API with disposable PostgreSQL', () => {
       [legacyProject.id],
     );
     await new FinancialInfrastructure20260919000000().up(runner);
+    await new FinancialControlPlane20260920000000().up(runner);
     const rows = await runner.query(
       `SELECT environment,config FROM project_providers WHERE project_id=$1`,
       [legacyProject.id],
@@ -287,7 +289,7 @@ suite('Financial API with disposable PostgreSQL', () => {
     ).rejects.toThrow('terminal');
     await expect(
       financial.wallet(liveCtx, { currency: 'NGN' }, 'live-wallet'),
-    ).rejects.toThrow('sandbox-only');
+    ).rejects.toThrow('Select Turnkey or Privy');
   });
   it('requires matching live connections and preserves pending checkout until verified', async () => {
     const connections = app.get(ProjectProviderService);
@@ -460,7 +462,7 @@ suite('Financial API with disposable PostgreSQL', () => {
       );
     const dto = { customer: liveCustomer.id, amount: '100', currency: 'NGN' };
     const pending = await financial.payment(liveCtx, dto, 'timeout-payment');
-    expect(pending.status).toBe('pending');
+    expect(pending.status).toBe('unknown');
     expect(pending.details.providerOutcome).toBe('unknown');
     expect((await financial.payment(liveCtx, dto, 'timeout-payment')).id).toBe(
       pending.id,
@@ -481,7 +483,9 @@ suite('Financial API with disposable PostgreSQL', () => {
       expect(item.status).toBe(
         ['failure', 'insufficient_funds'].includes(scenario)
           ? 'failed'
-          : 'pending',
+          : ['timeout', 'provider_outage'].includes(scenario)
+            ? 'unknown'
+            : 'pending',
       );
     }
   }, 22000);
@@ -592,6 +596,45 @@ suite('Financial API with disposable PostgreSQL', () => {
     expect((await financial.verifyRefund(liveCtx, refund.id)).status).toBe(
       'completed',
     );
+    expect(nock.isDone()).toBe(true);
+  });
+  it('routes multiple eligible providers through an auditable policy', async () => {
+    const policy = await financial.saveRoutingPolicy(liveCtx, {
+      strategy: 'custom_priority',
+      providerPriority: ['flutterwave', 'paystack'],
+      requireHealthy: true,
+      safeFailover: false,
+    });
+    expect(policy.providerPriority[0]).toBe('flutterwave');
+    const routedCustomer = await financial.customer(
+      liveCtx,
+      { email: 'routed@example.test' },
+      'routed-customer',
+    );
+    nock('https://api.flutterwave.com')
+      .post('/v3/payments')
+      .reply(200, {
+        status: 'success',
+        data: { link: 'https://checkout.flutterwave.com/routed' },
+      });
+    const routed = await financial.payment(
+      liveCtx,
+      {
+        customer: routedCustomer.id,
+        amount: '2500',
+        currency: 'NGN',
+        callbackUrl: 'https://merchant.example.test/return',
+      },
+      'routed-payment',
+    );
+    expect(routed.provider).toBe('flutterwave');
+    expect(routed.details.routingDecision).toMatchObject({
+      mode: 'policy',
+      policyId: policy.id,
+      strategy: 'custom_priority',
+      selected: 'flutterwave',
+      safeFailover: false,
+    });
     expect(nock.isDone()).toBe(true);
   });
   it('revokes keys, returns masked listings, and redacts request logs', async () => {

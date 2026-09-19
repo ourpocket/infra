@@ -4,6 +4,10 @@ import {
   IsString,
   IsUUID,
   IsUrl,
+  IsBoolean,
+  IsArray,
+  ArrayMinSize,
+  ArrayUnique,
   Matches,
   MaxLength,
   ValidateIf,
@@ -77,6 +81,14 @@ export class WalletDto {
   @ValidateIf((_: unknown, value: unknown) => value !== undefined)
   @IsUUID()
   customer?: string;
+  @ApiPropertyOptional({ enum: ['turnkey', 'privy'] })
+  @ValidateIf((_: unknown, value: unknown) => value !== undefined)
+  @IsIn(['turnkey', 'privy'])
+  provider?: 'turnkey' | 'privy';
+  @ApiPropertyOptional({ enum: ['ethereum', 'solana'] })
+  @ValidateIf((_: unknown, value: unknown) => value !== undefined)
+  @IsIn(['ethereum', 'solana'])
+  chain?: 'ethereum' | 'solana';
 }
 export class TransferDto extends AmountDto {
   @ApiProperty() @IsUUID() fromWallet!: string;
@@ -113,4 +125,41 @@ export class FinancialListQuery {
   @ValidateIf((_: unknown, value: unknown) => value !== undefined)
   @IsIn(['transactions', 'wallets', 'customers', 'all'])
   group?: 'transactions' | 'wallets' | 'customers' | 'all';
+}
+
+export class RoutingPolicyDto {
+  @ApiProperty({
+    enum: [
+      'best_success_rate',
+      'lowest_fees',
+      'fastest_response',
+      'custom_priority',
+    ],
+  })
+  @IsIn([
+    'best_success_rate',
+    'lowest_fees',
+    'fastest_response',
+    'custom_priority',
+  ])
+  strategy!:
+    | 'best_success_rate'
+    | 'lowest_fees'
+    | 'fastest_response'
+    | 'custom_priority';
+
+  @ApiPropertyOptional({ type: [String], example: ['paystack', 'flutterwave'] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @IsIn(['paystack', 'flutterwave'], { each: true })
+  providerPriority!: Array<'paystack' | 'flutterwave'>;
+
+  @ApiPropertyOptional({ default: true })
+  @IsBoolean()
+  requireHealthy!: boolean;
+
+  @ApiPropertyOptional({ default: false })
+  @IsBoolean()
+  safeFailover!: boolean;
 }

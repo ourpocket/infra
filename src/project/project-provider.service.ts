@@ -406,12 +406,19 @@ export class ProjectProviderService {
   }
 
   private getEncryptionKey(): Buffer {
+    if (
+      !process.env.PROVIDER_CONFIG_ENCRYPTION_KEY &&
+      process.env.NODE_ENV === 'production'
+    )
+      throw new UnauthorizedException(
+        'PROVIDER_CONFIG_ENCRYPTION_KEY is required in production',
+      );
+    const configuredSecret =
+      process.env.PROVIDER_CONFIG_ENCRYPTION_KEY || process.env.JWT_SECRET;
     return crypto
       .createHash('sha256')
       .update(
-        process.env.PROVIDER_CONFIG_ENCRYPTION_KEY ||
-          process.env.JWT_SECRET ||
-          'ourpocket-provider-config-development-secret',
+        configuredSecret || 'ourpocket-provider-config-development-secret',
       )
       .digest();
   }

@@ -21,6 +21,7 @@ import {
   Scenario,
   TransferDto,
   WalletDto,
+  RoutingPolicyDto,
 } from './financial.dto';
 import {
   Environment,
@@ -28,12 +29,17 @@ import {
   FinancialIdempotency,
   FinancialLog,
   FinancialResource,
+  FinancialRoutingPolicy,
+  FinancialProviderHealth,
+  FinancialReconciliationRun,
   OperationStatus,
   PaymentProvider,
+  WalletProvider,
   ResourceKind,
 } from './financial.entity';
 import { fingerprint, redact } from './financial-utils';
 import { PaymentAdapters } from './payment-adapters';
+import { WalletAdapters } from './wallet-adapters';
 export interface FinancialContext {
   projectId: string;
   environment: Environment;
@@ -58,6 +64,7 @@ export class FinancialService {
     private readonly db: DataSource,
     private readonly providers: ProjectProviderService,
     private readonly adapters: PaymentAdapters,
+    private readonly walletAdapters: WalletAdapters,
   ) {}
   async locked<T>(
     ctx: FinancialContext,
@@ -271,17 +278,32 @@ export class FinancialService {
     return scenario ?? 'success';
   }
   private scenarioStatus(scenario: Scenario): OperationStatus {
-    return ['pending', 'timeout', 'provider_outage'].includes(scenario)
-      ? 'pending'
-      : ['failure', 'insufficient_funds'].includes(scenario)
-        ? 'failed'
-        : 'completed';
+    return ['timeout', 'provider_outage'].includes(scenario)
+      ? 'unknown'
+      : scenario === 'pending'
+        ? 'pending'
+        : ['failure', 'insufficient_funds'].includes(scenario)
+          ? 'failed'
+          : 'completed';
   }
   private async provider(
     ctx: FinancialContext,
     requested?: PaymentProvider,
-  ): Promise<PaymentProvider> {
-    if (ctx.environment === 'sandbox') return requested ?? 'paystack';
+  ): Promise<{
+    provider: PaymentProvider;
+    decision: Record<string, unknown>;
+  }> {
+    if (ctx.environment === 'sandbox') {
+      const provider = requested ?? 'paystack';
+      return {
+        provider,
+        decision: {
+          mode: 'simulator',
+          selected: provider,
+          reason: requested ? 'explicit provider' : 'sandbox default',
+        },
+      };
+    }
     const catalog = await this.db.manager.find(ProviderCatalog, {
       where: {
         slug: In(paymentProviders),
@@ -304,17 +326,97 @@ export class FinancialService {
         throw new BadRequestException(
           'Provider is not connected in this environment',
         );
-      return requested;
+      return {
+        provider: requested,
+        decision: {
+          mode: 'explicit',
+          selected: requested,
+          candidates: connected.map((item) => item.type),
+          reason: 'provider supplied by request',
+        },
+      };
     }
-    if (connected.length !== 1)
+    if (!connected.length)
+      throw new BadRequestException('Connect a payment provider first');
+    if (connected.length === 1) {
+      const provider = String(connected[0].type) as PaymentProvider;
+      return {
+        provider,
+        decision: {
+          mode: 'sole_eligible',
+          selected: provider,
+          candidates: [provider],
+          reason: 'only eligible connected provider',
+        },
+      };
+    }
+    const policy = await this.db.manager.findOne(FinancialRoutingPolicy, {
+      where: { projectId: ctx.projectId, environment: ctx.environment },
+    });
+    if (!policy)
       throw new BadRequestException(
-        connected.length
-          ? 'Select a provider explicitly'
-          : 'Connect a payment provider first',
+        'Select a provider explicitly or configure a routing policy',
       );
-    return connected[0].type === PROVIDER_TYPE_ENUM.PAYSTACK
-      ? 'paystack'
-      : 'flutterwave';
+    const candidates = connected.map(
+      (item) => String(item.type) as PaymentProvider,
+    );
+    const health = await this.db.manager.find(FinancialProviderHealth, {
+      where: {
+        projectId: ctx.projectId,
+        environment: ctx.environment,
+        provider: In(candidates),
+      },
+    });
+    const sample = (provider: PaymentProvider) =>
+      health.find((item) => item.provider === provider);
+    const eligible = policy.requireHealthy
+      ? candidates.filter((provider) => sample(provider)?.status !== 'down')
+      : candidates;
+    if (!eligible.length)
+      throw new BadRequestException('No healthy payment provider is available');
+    const priority = policy.providerPriority.filter((provider) =>
+      eligible.includes(provider),
+    );
+    const ranked = [...eligible].sort((left, right) => {
+      const leftHealth = sample(left);
+      const rightHealth = sample(right);
+      if (policy.strategy === 'lowest_fees')
+        return (
+          (leftHealth?.estimatedFeeBps ?? 0) -
+          (rightHealth?.estimatedFeeBps ?? 0)
+        );
+      if (policy.strategy === 'fastest_response')
+        return (
+          (leftHealth?.p95LatencyMs ?? 0) - (rightHealth?.p95LatencyMs ?? 0)
+        );
+      if (policy.strategy === 'best_success_rate')
+        return (
+          Number(rightHealth?.successRate ?? '100') -
+          Number(leftHealth?.successRate ?? '100')
+        );
+      return priority.indexOf(left) - priority.indexOf(right);
+    });
+    const provider = ranked[0];
+    return {
+      provider,
+      decision: {
+        mode: 'policy',
+        policyId: policy.id,
+        strategy: policy.strategy,
+        selected: provider,
+        candidates,
+        eligible,
+        health: health.map((item) => ({
+          provider: item.provider,
+          status: item.status,
+          successRate: item.successRate,
+          p95LatencyMs: item.p95LatencyMs,
+          estimatedFeeBps: item.estimatedFeeBps,
+        })),
+        safeFailover: policy.safeFailover,
+        reason: `selected by ${policy.strategy}`,
+      },
+    };
   }
   private credentials(ctx: FinancialContext, provider: PaymentProvider) {
     return this.providers.getProviderApiKeyForProject(
@@ -334,7 +436,8 @@ export class FinancialService {
       dto,
       async (manager) => {
         await this.resource(ctx, dto.customer, 'customer', manager);
-        const provider = await this.provider(ctx, dto.provider);
+        const route = await this.provider(ctx, dto.provider);
+        const provider = route.provider;
         if (
           ctx.environment === 'production' &&
           provider === 'flutterwave' &&
@@ -356,6 +459,7 @@ export class FinancialService {
           details: {
             scenario: ctx.environment === 'sandbox' ? scenario : undefined,
             callbackUrl: dto.callbackUrl,
+            routingDecision: route.decision,
           },
         };
       },
@@ -369,9 +473,10 @@ export class FinancialService {
       const email = customer.details.email;
       if (typeof email !== 'string')
         throw new BadRequestException('Customer email missing');
+      const provider = item.provider as PaymentProvider;
       const result = await this.adapters.create(
-        item.provider,
-        await this.credentials(ctx, item.provider),
+        provider,
+        await this.credentials(ctx, provider),
         {
           reference: item.id,
           amount: dto.amount,
@@ -408,14 +513,13 @@ export class FinancialService {
     id: string,
     error: unknown,
   ) {
-    // A timeout or server error may follow a successful provider write. Keep the operation pending; never repeat the write.
     const rejected =
       axios.isAxiosError(error) &&
       error.response !== undefined &&
       [400, 401, 403, 404, 422].includes(error.response.status);
     return this.locked(ctx, async (manager) => {
       const item = await this.resource(ctx, id, undefined, manager);
-      if (item.status === 'pending') {
+      if (item.status === 'pending' || item.status === 'unknown') {
         item.details = {
           ...item.details,
           providerOutcome: rejected ? 'rejected' : 'unknown',
@@ -423,7 +527,7 @@ export class FinancialService {
         if (rejected) {
           item.status = 'failed';
           await this.emit(manager, item, `${item.kind}.failed`);
-        }
+        } else item.status = 'unknown';
         await manager.save(item);
       }
       await this.log(
@@ -438,12 +542,17 @@ export class FinancialService {
   }
   async verify(ctx: FinancialContext, id: string) {
     const item = await this.resource(ctx, id, 'payment');
-    if (ctx.environment === 'sandbox' || item.status !== 'pending') return item;
+    if (
+      ctx.environment === 'sandbox' ||
+      !['pending', 'unknown'].includes(item.status)
+    )
+      return item;
     if (!item.provider)
       throw new BadRequestException('Payment provider missing');
+    const provider = item.provider as PaymentProvider;
     const result = await this.adapters.verify(
-      item.provider,
-      await this.credentials(ctx, item.provider),
+      provider,
+      await this.credentials(ctx, provider),
       item.id,
     );
     if (
@@ -456,7 +565,7 @@ export class FinancialService {
       );
     return this.locked(ctx, async (manager) => {
       const current = await this.resource(ctx, id, 'payment', manager);
-      if (current.status === 'pending') {
+      if (['pending', 'unknown'].includes(current.status)) {
         current.providerReference = result.providerReference;
         if (result.status !== current.status) {
           current.status = result.status;
@@ -540,9 +649,10 @@ export class FinancialService {
         new Error('Verified provider payment reference unavailable'),
       );
     try {
+      const provider = item.provider as PaymentProvider;
       const result = await this.adapters.refund(
-        item.provider,
-        await this.credentials(ctx, item.provider),
+        provider,
+        await this.credentials(ctx, provider),
         payment.providerReference,
         item.amount,
         item.currency,
@@ -550,7 +660,6 @@ export class FinancialService {
       return this.locked(ctx, async (manager) => {
         const current = await this.resource(ctx, item.id, 'refund', manager);
         current.providerReference = result.reference;
-        // Refund initiation cannot settle funds. A verified refund response must match the parent transaction and amount.
         await manager.save(current);
         await this.log(
           ctx,
@@ -567,7 +676,11 @@ export class FinancialService {
   }
   async verifyRefund(ctx: FinancialContext, id: string) {
     const item = await this.resource(ctx, id, 'refund');
-    if (ctx.environment === 'sandbox' || item.status !== 'pending') return item;
+    if (
+      ctx.environment === 'sandbox' ||
+      !['pending', 'unknown'].includes(item.status)
+    )
+      return item;
     if (!item.provider || !item.providerReference)
       throw new ConflictException(
         'Refund outcome is uncertain; provider reference is not available',
@@ -575,9 +688,10 @@ export class FinancialService {
     if (!item.parentId || !item.currency)
       throw new ConflictException('Refund parent missing');
     const payment = await this.resource(ctx, item.parentId, 'payment');
+    const provider = item.provider as PaymentProvider;
     const result = await this.adapters.verifyRefund(
-      item.provider,
-      await this.credentials(ctx, item.provider),
+      provider,
+      await this.credentials(ctx, provider),
       item.providerReference,
       item.currency,
     );
@@ -592,7 +706,10 @@ export class FinancialService {
       );
     return this.locked(ctx, async (manager) => {
       const current = await this.resource(ctx, id, 'refund', manager);
-      if (current.status === 'pending' && result.status !== 'pending') {
+      if (
+        ['pending', 'unknown'].includes(current.status) &&
+        result.status !== 'pending'
+      ) {
         current.status = result.status;
         await manager.save(current);
         await this.emit(manager, current, `refund.${current.status}`);
@@ -601,20 +718,72 @@ export class FinancialService {
     });
   }
   async wallet(ctx: FinancialContext, dto: WalletDto, key?: string) {
-    this.sandbox(ctx);
-    return (
-      await this.create(ctx, 'wallets.create', key, dto, async (manager) => {
+    const walletProvider = dto.provider;
+    if (ctx.environment === 'production' && !walletProvider)
+      throw new BadRequestException(
+        'Select Turnkey or Privy for a production wallet',
+      );
+    const walletConfig =
+      ctx.environment === 'production' && walletProvider
+        ? await this.providers.getProviderConfigForProject(
+            ctx.projectId,
+            walletProvider === 'turnkey'
+              ? PROVIDER_TYPE_ENUM.TURNKEY
+              : PROVIDER_TYPE_ENUM.PRIVY,
+            ctx.environment,
+          )
+        : null;
+    const created = await this.create(
+      ctx,
+      'wallets.create',
+      key,
+      dto,
+      async (manager) => {
         if (dto.customer)
           await this.resource(ctx, dto.customer, 'customer', manager);
         return {
           kind: 'wallet',
-          status: 'completed',
+          status: ctx.environment === 'sandbox' ? 'completed' : 'pending',
           currency: dto.currency,
           parentId: dto.customer ?? null,
-          details: { balance: '0' },
+          provider: walletProvider ?? null,
+          details: {
+            balance: '0',
+            chain: dto.chain,
+            custody: ctx.environment === 'sandbox' ? 'simulated' : 'provider',
+          },
         };
-      })
-    ).item;
+      },
+    );
+    if (!created.created || ctx.environment === 'sandbox') return created.item;
+    const item = created.item;
+    const provider = item.provider as WalletProvider | null;
+    if (!provider) throw new BadRequestException('Wallet provider missing');
+    try {
+      const result = await this.walletAdapters.create(
+        provider,
+        walletConfig ?? {},
+        {
+          reference: item.id,
+          chain: dto.chain ?? 'ethereum',
+        },
+      );
+      return this.locked(ctx, async (manager) => {
+        const current = await this.resource(ctx, item.id, 'wallet', manager);
+        current.status = 'completed';
+        current.providerReference = result.reference;
+        current.details = {
+          ...current.details,
+          address: result.address,
+          chain: result.chain,
+        };
+        await manager.save(current);
+        await this.emit(manager, current, 'wallet.completed');
+        return current;
+      });
+    } catch (error) {
+      return this.providerFailure(ctx, item.id, error);
+    }
   }
   async walletOperation(
     ctx: FinancialContext,
@@ -672,7 +841,9 @@ export class FinancialService {
               operation,
               fromWallet,
               toWallet,
-              reserved: Boolean(from && status === 'pending'),
+              reserved: Boolean(
+                from && ['pending', 'unknown'].includes(status),
+              ),
               scenario,
             },
           };
@@ -700,7 +871,7 @@ export class FinancialService {
       const item = await this.resource(ctx, id, undefined, manager);
       if (!['payment', 'refund', 'transfer'].includes(item.kind))
         throw new BadRequestException('Resource cannot be simulated');
-      if (item.status !== 'pending') {
+      if (!['pending', 'unknown'].includes(item.status)) {
         if (item.status !== status)
           throw new ConflictException('Operation is already terminal');
         return item;
@@ -726,6 +897,143 @@ export class FinancialService {
       await this.emit(manager, item, `${item.kind}.${status}`);
       return item;
     });
+  }
+  async routingPolicy(ctx: FinancialContext) {
+    const existing = await this.db.manager.findOne(FinancialRoutingPolicy, {
+      where: { projectId: ctx.projectId, environment: ctx.environment },
+    });
+    return (
+      existing ?? {
+        id: null,
+        projectId: ctx.projectId,
+        environment: ctx.environment,
+        strategy: 'best_success_rate',
+        providerPriority: ['paystack', 'flutterwave'],
+        requireHealthy: true,
+        safeFailover: false,
+      }
+    );
+  }
+  async saveRoutingPolicy(ctx: FinancialContext, dto: RoutingPolicyDto) {
+    return this.locked(ctx, async (manager) => {
+      const existing = await manager.findOne(FinancialRoutingPolicy, {
+        where: { projectId: ctx.projectId, environment: ctx.environment },
+      });
+      const policy = manager.create(FinancialRoutingPolicy, {
+        ...(existing ?? {}),
+        projectId: ctx.projectId,
+        environment: ctx.environment,
+        strategy: dto.strategy,
+        providerPriority: dto.providerPriority,
+        requireHealthy: dto.requireHealthy,
+        safeFailover: dto.safeFailover,
+      });
+      const saved = await manager.save(policy);
+      await this.log(
+        ctx,
+        'routing.policy.updated',
+        'application',
+        {
+          policyId: saved.id,
+          strategy: saved.strategy,
+          providerPriority: saved.providerPriority,
+        },
+        manager,
+      );
+      return saved;
+    });
+  }
+  async providerHealth(ctx: FinancialContext) {
+    const records = await this.db.manager.find(FinancialProviderHealth, {
+      where: { projectId: ctx.projectId, environment: ctx.environment },
+    });
+    const payments = await this.list(ctx, 'payment');
+    const integrations = await this.integrations(ctx);
+    return paymentProviders.map((provider) => {
+      const record = records.find((item) => item.provider === provider);
+      const providerPayments = payments.filter(
+        (item) => item.provider === provider,
+      );
+      const completed = providerPayments.filter(
+        (item) => item.status === 'completed',
+      ).length;
+      return {
+        provider,
+        connected: integrations.some(
+          (item) => String(item.provider) === provider && item.isActive,
+        ),
+        status: record?.status ?? 'healthy',
+        successRate:
+          record?.successRate ??
+          (providerPayments.length
+            ? ((completed / providerPayments.length) * 100).toFixed(2)
+            : '100.00'),
+        p95LatencyMs: record?.p95LatencyMs ?? 0,
+        estimatedFeeBps: record?.estimatedFeeBps ?? 0,
+        updatedAt: record?.updatedAt ?? null,
+      };
+    });
+  }
+  reconciliationRuns(ctx: FinancialContext) {
+    return this.db.manager.find(FinancialReconciliationRun, {
+      where: { projectId: ctx.projectId, environment: ctx.environment },
+      order: { createdAt: 'DESC' },
+      take: 50,
+    });
+  }
+  async reconcile(ctx: FinancialContext) {
+    if (ctx.environment !== 'production')
+      throw new BadRequestException(
+        'Provider reconciliation runs in production only',
+      );
+    const resources = await this.db.manager.find(FinancialResource, {
+      where: {
+        projectId: ctx.projectId,
+        environment: ctx.environment,
+        kind: In(['payment', 'refund']),
+        status: In(['pending', 'unknown']),
+      },
+      order: { createdAt: 'ASC' },
+      take: 100,
+    });
+    const run = await this.db.manager.save(
+      FinancialReconciliationRun,
+      this.db.manager.create(FinancialReconciliationRun, {
+        projectId: ctx.projectId,
+        environment: ctx.environment,
+        requestId: ctx.requestId,
+        status: 'running',
+        inspected: resources.length,
+        resourceIds: resources.map((item) => item.id),
+      }),
+    );
+    let resolved = 0;
+    for (const resource of resources) {
+      try {
+        const result =
+          resource.kind === 'payment'
+            ? await this.verify(ctx, resource.id)
+            : await this.verifyRefund(ctx, resource.id);
+        if (['completed', 'failed'].includes(result.status)) resolved += 1;
+      } catch (error) {
+        await this.log(ctx, 'reconciliation.inspect', 'provider', {
+          resourceId: resource.id,
+          outcome: 'unresolved',
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    }
+    run.status = 'completed';
+    run.resolved = resolved;
+    run.unresolved = resources.length - resolved;
+    await this.db.manager.save(run);
+    await this.log(ctx, 'reconciliation.completed', 'application', {
+      runId: run.id,
+      inspected: run.inspected,
+      resolved,
+      unresolved: run.unresolved,
+    });
+    return run;
   }
   async metrics(ctx: FinancialContext) {
     const scope = [ctx.projectId, ctx.environment];
@@ -762,6 +1070,9 @@ export class FinancialService {
         successfulTransactions: successful,
         failedTransactions: operations.filter(
           (item) => item.status === 'failed',
+        ).length,
+        unknownTransactions: operations.filter(
+          (item) => item.status === 'unknown',
         ).length,
         activeWallets: resources.filter((item) => item.kind === 'wallet')
           .length,

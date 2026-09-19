@@ -13,8 +13,10 @@ export type ResourceKind =
   | 'refund'
   | 'wallet'
   | 'transfer';
-export type OperationStatus = 'pending' | 'completed' | 'failed';
+export type OperationStatus = 'pending' | 'unknown' | 'completed' | 'failed';
 export type PaymentProvider = 'paystack' | 'flutterwave';
+export type WalletProvider = 'turnkey' | 'privy';
+export type FinancialProvider = PaymentProvider | WalletProvider;
 @Entity('financial_resources')
 @Index(['projectId', 'environment', 'kind'])
 export class FinancialResource {
@@ -27,7 +29,7 @@ export class FinancialResource {
     | string
     | null;
   @Column('varchar', { nullable: true }) currency!: string | null;
-  @Column('varchar', { nullable: true }) provider!: PaymentProvider | null;
+  @Column('varchar', { nullable: true }) provider!: FinancialProvider | null;
   @Column('varchar', { nullable: true }) providerReference!: string | null;
   @Column('uuid', { nullable: true }) parentId!: string | null;
   @Column('jsonb', { default: () => "'{}'::jsonb" }) details!: Record<
@@ -108,6 +110,59 @@ export class FinancialLog {
   @Column('jsonb') details!: Record<string, unknown>;
   @CreateDateColumn() createdAt!: Date;
 }
+@Entity('financial_routing_policies')
+@Index(['projectId', 'environment'], { unique: true })
+export class FinancialRoutingPolicy {
+  @PrimaryGeneratedColumn('uuid') id!: string;
+  @Column('uuid') projectId!: string;
+  @Column('varchar') environment!: Environment;
+  @Column('varchar', { default: 'best_success_rate' }) strategy!:
+    | 'best_success_rate'
+    | 'lowest_fees'
+    | 'fastest_response'
+    | 'custom_priority';
+  @Column('jsonb', { default: () => '\'["paystack","flutterwave"]\'::jsonb' })
+  providerPriority!: PaymentProvider[];
+  @Column('boolean', { default: true }) requireHealthy!: boolean;
+  @Column('boolean', { default: false }) safeFailover!: boolean;
+  @CreateDateColumn() createdAt!: Date;
+  @UpdateDateColumn() updatedAt!: Date;
+}
+@Entity('financial_provider_health')
+@Index(['projectId', 'environment', 'provider'], { unique: true })
+export class FinancialProviderHealth {
+  @PrimaryGeneratedColumn('uuid') id!: string;
+  @Column('uuid') projectId!: string;
+  @Column('varchar') environment!: Environment;
+  @Column('varchar') provider!: PaymentProvider;
+  @Column('varchar', { default: 'healthy' }) status!:
+    | 'healthy'
+    | 'degraded'
+    | 'down';
+  @Column('numeric', { precision: 5, scale: 2, default: '100' })
+  successRate!: string;
+  @Column('int', { default: 0 }) p95LatencyMs!: number;
+  @Column('int', { default: 0 }) estimatedFeeBps!: number;
+  @UpdateDateColumn() updatedAt!: Date;
+}
+@Entity('financial_reconciliation_runs')
+@Index(['projectId', 'environment', 'createdAt'])
+export class FinancialReconciliationRun {
+  @PrimaryGeneratedColumn('uuid') id!: string;
+  @Column('uuid') projectId!: string;
+  @Column('varchar') environment!: Environment;
+  @Column('varchar', { default: 'completed' }) status!:
+    | 'running'
+    | 'completed'
+    | 'failed';
+  @Column('int', { default: 0 }) inspected!: number;
+  @Column('int', { default: 0 }) resolved!: number;
+  @Column('int', { default: 0 }) unresolved!: number;
+  @Column('jsonb', { default: () => "'[]'::jsonb" }) resourceIds!: string[];
+  @Column('uuid') requestId!: string;
+  @CreateDateColumn() createdAt!: Date;
+  @UpdateDateColumn() updatedAt!: Date;
+}
 export const financialEntities = [
   FinancialResource,
   FinancialIdempotency,
@@ -115,4 +170,7 @@ export const financialEntities = [
   FinancialDelivery,
   FinancialReceipt,
   FinancialLog,
+  FinancialRoutingPolicy,
+  FinancialProviderHealth,
+  FinancialReconciliationRun,
 ];
