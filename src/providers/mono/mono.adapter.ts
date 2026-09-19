@@ -11,15 +11,19 @@ import {
   ProviderConnectionValidation,
 } from '../contracts';
 import { ProviderHttpClient } from '../shared/http-client';
+import { ProviderOperationsAdapter } from '../operations';
 
 const scalar = z.union([z.string(), z.number()]);
 
-export class MonoAdapter implements PaymentProviderAdapter {
+export class MonoAdapter
+  implements PaymentProviderAdapter, ProviderOperationsAdapter
+{
   readonly id = PROVIDER_TYPE_ENUM.MONO;
   readonly capabilities = new Set<ProviderCapability>([
     ProviderCapability.HostedCheckout,
     ProviderCapability.PaymentVerification,
   ]);
+  readonly operations = new Set<string>();
   private readonly http = new ProviderHttpClient(
     'https://api.withmono.com/v2',
     (key) => ({

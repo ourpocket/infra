@@ -17,16 +17,30 @@ import {
   RefundVerification,
 } from '../contracts';
 import { ProviderHttpClient } from '../shared/http-client';
+import { section, stringValue, unavailableSection } from '../shared/overview';
+import {
+  ProviderActivityItem,
+  ProviderActivityQuery,
+  ProviderOperationsAdapter,
+  ProviderOverview,
+} from '../operations';
 
 const scalar = z.union([z.string(), z.number()]);
 const terminalRefund = /^completed-(bank-transfer|momo|mpgs|offline|preauth)$/;
 
-export class FlutterwaveAdapter implements PaymentProviderAdapter {
+export class FlutterwaveAdapter
+  implements PaymentProviderAdapter, ProviderOperationsAdapter
+{
   readonly id = PROVIDER_TYPE_ENUM.FLUTTERWAVE;
   readonly capabilities = new Set<ProviderCapability>([
     ProviderCapability.HostedCheckout,
     ProviderCapability.PaymentVerification,
     ProviderCapability.Refunds,
+    ProviderCapability.AccountResolution,
+    ProviderCapability.PayoutRecipients,
+    ProviderCapability.Payouts,
+    ProviderCapability.VirtualAccounts,
+    ProviderCapability.ProviderActivity,
   ]);
   private readonly http = new ProviderHttpClient(
     'https://api.flutterwave.com/v3',
@@ -134,6 +148,185 @@ export class FlutterwaveAdapter implements PaymentProviderAdapter {
     };
   }
 
+  readonly operations = new Set([
+    'account_resolution',
+    'payout_recipients',
+    'payouts',
+    'virtual_accounts',
+    'provider_activity',
+  ]);
+
+  async resolveAccount(
+    key: string,
+    input: { accountNumber: string; bankCode: string },
+  ) {
+    const data = await this.http.request(
+      key,
+      'POST',
+      '/accounts/resolve',
+      z.object({
+        account_name: z.string(),
+        account_number: z.string().optional(),
+      }),
+      { account_number: input.accountNumber, account_bank: input.bankCode },
+    );
+    return {
+      accountName: data.account_name,
+      accountNumber: data.account_number ?? input.accountNumber,
+      bankCode: input.bankCode,
+    };
+  }
+
+  async createRecipient(key: string, input: Record<string, unknown>) {
+    return this.http.request(
+      key,
+      'POST',
+      '/beneficiaries',
+      z.object({}).passthrough(),
+      input,
+    );
+  }
+
+  async getRecipient(key: string, reference: string) {
+    return this.http.request(
+      key,
+      'GET',
+      `/beneficiaries/${encodeURIComponent(reference)}`,
+      z.object({}).passthrough(),
+    );
+  }
+
+  async createPayout(key: string, input: Record<string, unknown>) {
+    const amount = this.writeAmount(input.amount, input.currency);
+    return this.http.request(
+      key,
+      'POST',
+      '/transfers',
+      z.object({}).passthrough(),
+      { ...input, amount },
+    );
+  }
+
+  async getPayout(key: string, reference: string) {
+    return this.http.request(
+      key,
+      'GET',
+      `/transfers/${encodeURIComponent(reference)}`,
+      z.object({}).passthrough(),
+    );
+  }
+
+  async createVirtualAccount(key: string, input: Record<string, unknown>) {
+    const amount = this.writeAmount(input.amount, input.currency);
+    return this.http.request(
+      key,
+      'POST',
+      '/virtual-account-numbers',
+      z.object({}).passthrough(),
+      { ...input, amount },
+    );
+  }
+
+  async getVirtualAccount(key: string, reference: string) {
+    return this.http.request(
+      key,
+      'GET',
+      `/virtual-account-numbers/${encodeURIComponent(reference)}`,
+      z.object({}).passthrough(),
+    );
+  }
+
+  async overview(
+    key: string,
+    query: ProviderActivityQuery,
+  ): Promise<ProviderOverview> {
+    const filters = new URLSearchParams({
+      page: String(query.page),
+      page_size: String(query.limit),
+      ...(query.from ? { from: query.from } : {}),
+      ...(query.to ? { to: query.to } : {}),
+    });
+    const [balances, totals, payments, payouts] = await Promise.all([
+      section(async () => {
+        const values = await this.http.request(
+          key,
+          'GET',
+          '/balances',
+          z.array(
+            z.object({
+              currency: z.string(),
+              available_balance: scalar.optional(),
+              ledger_balance: scalar.optional(),
+              available: scalar.optional(),
+              ledger: scalar.optional(),
+            }),
+          ),
+        );
+        return values.map((balance) => ({
+          currency: balance.currency,
+          available: stringValue(
+            balance.available_balance ?? balance.available,
+          ),
+          ledger: stringValue(balance.ledger_balance ?? balance.ledger),
+        }));
+      }),
+      section(async () => {
+        const records = await this.http.request(
+          key,
+          'GET',
+          `/transactions?${filters}`,
+          z.array(z.object({}).passthrough()),
+        );
+        return {
+          transactionCount: records.length,
+          // Flutterwave returns values in major units. A client-side sum here
+          // would lose decimal precision and misrepresent multi-currency data.
+          volumeByCurrency: [],
+          pendingPayouts: null,
+        };
+      }),
+      section(async () => this.activity(key, `/transactions?${filters}`)),
+      section(async () => this.activity(key, `/transfers?${filters}`)),
+    ]);
+    return {
+      provider: this.id,
+      fetchedAt: new Date().toISOString(),
+      source: 'live',
+      capabilities: [...this.capabilities],
+      balances,
+      totals,
+      payments,
+      payouts,
+      virtualAccounts: unavailableSection(
+        new Error(
+          'Flutterwave does not provide a general virtual account listing endpoint',
+        ),
+      ),
+    };
+  }
+
+  private async activity(
+    key: string,
+    path: string,
+  ): Promise<ProviderActivityItem[]> {
+    const records = await this.http.request(
+      key,
+      'GET',
+      path,
+      z.array(z.object({}).passthrough()),
+    );
+    return records.map((record) => ({
+      id: stringValue(record.id) ?? stringValue(record.tx_ref) ?? 'unknown',
+      reference: stringValue(record.tx_ref) ?? stringValue(record.reference),
+      status: stringValue(record.status) ?? 'unknown',
+      amount: stringValue(record.amount),
+      currency: stringValue(record.currency),
+      occurredAt:
+        stringValue(record.created_at) ?? stringValue(record.createdAt),
+      channel: stringValue(record.payment_type),
+    }));
+  }
+
   async validateConnection(key: string): Promise<ProviderConnectionValidation> {
     await this.http.request(key, 'GET', '/balances', z.unknown());
     return { capabilities: [...this.capabilities] };
@@ -150,6 +343,12 @@ export class FlutterwaveAdapter implements PaymentProviderAdapter {
       secret.length > 0 &&
       equalSignature(secret, headers['verif-hash'])
     );
+  }
+
+  private writeAmount(amount: unknown, currency: unknown): string {
+    if (typeof amount !== 'string' || typeof currency !== 'string')
+      throw new BadGatewayException('Provider payout amount is invalid');
+    return minorToMajor(amount, currency);
   }
 
   private majorToMinor(amount: string | number, currency: string): string {
