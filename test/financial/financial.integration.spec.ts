@@ -25,6 +25,7 @@ import { AuthModule } from '../../src/auth/auth.module';
 import { User } from '../../src/entities/user.entity';
 import { PlatformAccount } from '../../src/entities/platform-account.entity';
 import { Project } from '../../src/entities/project.entity';
+import { ProviderCatalog } from '../../src/entities/provider-catalog.entity';
 import { ProjectApiKeyService } from '../../src/project/project-api-key.service';
 import { ProjectService } from '../../src/project/project.service';
 import { ProjectProviderService } from '../../src/project/project-provider.service';
@@ -34,12 +35,14 @@ import {
   FinancialEvent,
   FinancialLog,
   FinancialDelivery,
+  FinancialProviderHealth,
 } from '../../src/financial/financial.entity';
 import {
   FinancialService,
   FinancialContext,
 } from '../../src/financial/financial.service';
 import { FinancialWebhooksService } from '../../src/financial/financial-webhooks.service';
+import { WalletAdapters } from '../../src/financial/wallet-adapters';
 import { InitialSchema20260101000000 } from '../../src/migrations/20260101000000-InitialSchema';
 import { ProviderCatalog20260918000000 } from '../../src/migrations/20260918000000-ProviderCatalog';
 import { FinancialInfrastructure20260919000000 } from '../../src/migrations/20260919000000-FinancialInfrastructure';
@@ -636,6 +639,185 @@ suite('Financial API with disposable PostgreSQL', () => {
       safeFailover: false,
     });
     expect(nock.isDone()).toBe(true);
+  });
+  it('only changes providers before a write when failover is enabled', async () => {
+    const healthResponse = await fetch(`${base}/provider-health/flutterwave`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${liveKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ status: 'down', estimatedFeeBps: 100 }),
+    });
+    expect(healthResponse.status).toBe(201);
+    expect(
+      (await financial.providerHealth(liveCtx)).find(
+        (entry) => entry.provider === 'flutterwave',
+      ),
+    ).toMatchObject({ status: 'down', estimatedFeeBps: 100 });
+    expect(
+      (await financial.providerHealth(ctx)).find(
+        (entry) => entry.provider === 'flutterwave',
+      ),
+    ).toMatchObject({ status: 'unknown', estimatedFeeBps: null });
+    await financial.saveProviderHealth(liveCtx, 'paystack', {
+      status: 'healthy',
+      estimatedFeeBps: 200,
+    });
+    expect(
+      await db.manager.count(FinancialProviderHealth, {
+        where: { projectId, environment: 'production' },
+      }),
+    ).toBe(2);
+    const liveCustomer = await financial.customer(
+      liveCtx,
+      { email: 'failover@example.test' },
+      'failover-customer',
+    );
+    const input = {
+      customer: liveCustomer.id,
+      amount: '2500',
+      currency: 'NGN',
+      callbackUrl: 'https://merchant.example.test/return',
+    };
+    await expect(
+      financial.payment(liveCtx, input, 'failover-disabled'),
+    ).rejects.toThrow('Preferred provider is down');
+    await financial.saveRoutingPolicy(liveCtx, {
+      strategy: 'custom_priority',
+      providerPriority: ['flutterwave', 'paystack'],
+      requireHealthy: true,
+      safeFailover: true,
+    });
+    nock('https://api.paystack.co')
+      .post('/transaction/initialize')
+      .reply(200, (_uri, body) => ({
+        status: true,
+        data: {
+          reference: JSON.parse(JSON.stringify(body)).reference,
+          authorization_url: 'https://checkout.paystack.com/failover',
+        },
+      }));
+    const routed = await financial.payment(liveCtx, input, 'failover-enabled');
+    expect(routed.provider).toBe('paystack');
+    expect(routed.details.routingDecision).toMatchObject({
+      selected: 'paystack',
+      safeFailover: true,
+      reason: expect.stringContaining('before any provider write'),
+    });
+    expect(nock.isDone()).toBe(true);
+  });
+  it('chooses the configured lower fee and records the provider measurements', async () => {
+    await financial.saveProviderHealth(liveCtx, 'flutterwave', {
+      status: 'healthy',
+      estimatedFeeBps: 100,
+    });
+    await financial.saveRoutingPolicy(liveCtx, {
+      strategy: 'lowest_fees',
+      providerPriority: ['paystack', 'flutterwave'],
+      requireHealthy: true,
+      safeFailover: false,
+    });
+    const liveCustomer = await financial.customer(
+      liveCtx,
+      { email: 'fee-route@example.test' },
+      'fee-route-customer',
+    );
+    nock('https://api.flutterwave.com')
+      .post('/v3/payments')
+      .reply(200, {
+        status: 'success',
+        data: { link: 'https://checkout.flutterwave.com/fee-route' },
+      });
+    const payment = await financial.payment(
+      liveCtx,
+      {
+        customer: liveCustomer.id,
+        amount: '2500',
+        currency: 'NGN',
+        callbackUrl: 'https://merchant.example.test/return',
+      },
+      'lowest-fee-payment',
+    );
+    expect(payment.provider).toBe('flutterwave');
+    expect(payment.details.routingDecision).toMatchObject({
+      strategy: 'lowest_fees',
+      selected: 'flutterwave',
+    });
+    expect(typeof payment.details.providerLatencyMs).toBe('number');
+    const health = await financial.providerHealth(liveCtx);
+    expect(
+      health.find((entry) => entry.provider === 'flutterwave'),
+    ).toMatchObject({ estimatedFeeBps: 100 });
+    expect(nock.isDone()).toBe(true);
+  });
+  it('keeps production chain wallets separate from sandbox fiat balances', async () => {
+    await expect(financial.wallet(ctx, {}, 'missing-currency')).rejects.toThrow(
+      'Fiat currency is required',
+    );
+    await expect(
+      financial.wallet(
+        ctx,
+        { currency: 'NGN', provider: 'turnkey' },
+        'sandbox-provider',
+      ),
+    ).rejects.toThrow('production-only');
+    await expect(
+      financial.wallet(
+        liveCtx,
+        { currency: 'NGN', provider: 'turnkey', chain: 'ethereum' },
+        'fiat-live',
+      ),
+    ).rejects.toThrow('no fiat currency');
+    await expect(
+      financial.wallet(liveCtx, { provider: 'turnkey' }, 'chain-missing'),
+    ).rejects.toThrow('Select a production wallet chain');
+    const turnkey = await db.manager.findOneByOrFail(ProviderCatalog, {
+      slug: 'turnkey',
+    });
+    await app.get(ProjectProviderService).connectProvider(
+      userId,
+      projectId,
+      {
+        providerId: turnkey.id,
+        config: {
+          organizationId: 'fixture-org',
+          apiPublicKey: 'fixture-public',
+          apiPrivateKey: 'fixture-private',
+        },
+      },
+      'production',
+    );
+    const create = jest
+      .spyOn(app.get(WalletAdapters), 'create')
+      .mockResolvedValue({
+        reference: 'provider-wallet',
+        address: '0x1234567890abcdef1234567890abcdef12345678',
+        chain: 'ethereum',
+      });
+    try {
+      const wallet = await financial.wallet(
+        liveCtx,
+        { provider: 'turnkey', chain: 'ethereum' },
+        'chain-wallet',
+      );
+      expect(wallet.currency).toBeNull();
+      expect(wallet.details.balance).toBeNull();
+      expect(wallet.details.address).toBe(
+        '0x1234567890abcdef1234567890abcdef12345678',
+      );
+      expect(create).toHaveBeenCalledTimes(1);
+      expect(
+        await financial.wallet(
+          liveCtx,
+          { provider: 'turnkey', chain: 'ethereum' },
+          'chain-wallet',
+        ),
+      ).toMatchObject({ id: wallet.id });
+      expect(create).toHaveBeenCalledTimes(1);
+    } finally {
+      create.mockRestore();
+    }
   });
   it('revokes keys, returns masked listings, and redacts request logs', async () => {
     const keys = app.get(ProjectApiKeyService);

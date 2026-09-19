@@ -29,7 +29,7 @@ Paystack sends `X-Paystack-Signature` HMAC-SHA512. Current Flutterwave webhooks 
 5. Deploy the frontend after the backend and migration are healthy. The environment selector defaults to Sandbox and every dashboard request carries `X-Environment`.
 6. The migration `down` drops normalized financial history. Do not roll it back after accepting financial traffic. Roll forward instead.
 
-No package or app needs publishing for this rollout. `@ourpocket/sdk` is a private source workspace in the frontend repository. Web3/crypto wallets, Turnkey, Privy, stablecoins, production wallet ledgers, bank payouts, advanced routing/failover, reconciliation, billing and enterprise controls remain out of scope.
+No package or app needs publishing for this rollout. `@ourpocket/sdk` is a private source workspace in the frontend repository. The subsequent control-plane release adds Turnkey and Privy chain wallet creation, explicit routing, and reconciliation; see [financial-control-plane.md](financial-control-plane.md). Stablecoins, production wallet ledgers, bank payouts, executable billing, and enterprise controls remain unimplemented.
 
 ## Verification
 

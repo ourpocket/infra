@@ -27,11 +27,7 @@ export class WalletAdapters {
         : await this.createPrivy(config, input);
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
-      throw new BadGatewayException(
-        error instanceof Error
-          ? error.message
-          : 'Wallet provider request failed',
-      );
+      throw new BadGatewayException('Wallet provider request failed');
     }
   }
 

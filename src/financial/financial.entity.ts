@@ -141,10 +141,10 @@ export class FinancialProviderHealth {
     | 'healthy'
     | 'degraded'
     | 'down';
-  @Column('numeric', { precision: 5, scale: 2, default: '100' })
-  successRate!: string;
-  @Column('int', { default: 0 }) p95LatencyMs!: number;
-  @Column('int', { default: 0 }) estimatedFeeBps!: number;
+  @Column('numeric', { precision: 5, scale: 2, nullable: true })
+  successRate!: string | null;
+  @Column('int', { nullable: true }) p95LatencyMs!: number | null;
+  @Column('int', { nullable: true }) estimatedFeeBps!: number | null;
   @UpdateDateColumn() updatedAt!: Date;
 }
 @Entity('financial_reconciliation_runs')

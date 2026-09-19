@@ -30,9 +30,11 @@ Production provider credentials are supplied through encrypted project connectio
 
 When a request names a payment provider, the control plane validates that connection and records an explicit decision. A sole eligible connection is selected automatically. Multiple eligible connections require a saved routing policy or an explicit provider.
 
-Routing policies support verified success rate, configured fees, observed latency, and explicit provider priority. The selected provider, eligible candidates, health snapshot, policy, and reason are persisted on the payment.
+Routing policies support settled payment success rate, operator-configured fee estimates, observed checkout initialization latency, and explicit provider priority. Measurements use the latest 1,000 environment-scoped payments and include sample counts. An absent measurement falls back to the configured provider order; it is never presented as 100% success or zero fees. Operators set provider status and fee estimates with `POST /v1/provider-health/:provider` or the project dashboard route. The selected provider, eligible candidates, health snapshot, policy, and reason are persisted on the payment.
 
-Failover is limited to selection before a provider write. Timeouts and server errors produce the first-class `unknown` status and are never retried against another provider. A production reconciliation run verifies pending and unknown operations against their original provider.
+With `requireHealthy`, a down preferred provider blocks the request unless `safeFailover` is enabled. That setting selects the next eligible provider **before** any provider write. Timeouts and server errors produce the first-class `unknown` status and are never retried against another provider. A production reconciliation run verifies pending and unknown operations against their original provider.
+
+Production Turnkey and Privy wallet creation stores a chain address and provider reference. It has no fiat currency, simulated balance, funding, or transfers. Sandbox fiat wallets remain isolated and require a fiat currency. Provider wallet exceptions return a generic error; credentials and upstream error bodies are not exposed.
 
 ## Rollout
 

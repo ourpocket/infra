@@ -41,9 +41,9 @@ export class FinancialControlPlane20260920000000 implements MigrationInterface {
         environment varchar NOT NULL CHECK (environment IN ('sandbox','production')),
         provider varchar NOT NULL CHECK (provider IN ('paystack','flutterwave')),
         status varchar NOT NULL DEFAULT 'healthy' CHECK (status IN ('healthy','degraded','down')),
-        "successRate" numeric(5,2) NOT NULL DEFAULT 100,
-        "p95LatencyMs" integer NOT NULL DEFAULT 0,
-        "estimatedFeeBps" integer NOT NULL DEFAULT 0,
+        "successRate" numeric(5,2),
+        "p95LatencyMs" integer,
+        "estimatedFeeBps" integer,
         "updatedAt" timestamp NOT NULL DEFAULT now(),
         CONSTRAINT financial_provider_health_project_fk FOREIGN KEY ("projectId") REFERENCES projects(id) ON DELETE CASCADE,
         CONSTRAINT financial_provider_health_scope_unique UNIQUE ("projectId", environment, provider)
@@ -93,7 +93,7 @@ export class FinancialControlPlane20260920000000 implements MigrationInterface {
           'turnkey', 'Turnkey',
           'Policy-controlled wallet infrastructure for Ethereum and Solana.',
           '/img/turnkey_logo.svg', 'wallet_infrastructure',
-          '["wallet_operations","signing","policies"]'::jsonb,
+          '["wallet_operations"]'::jsonb,
           '[{"key":"organizationId","label":"Organization ID","type":"text","required":true},{"key":"apiPublicKey","label":"API public key","type":"text","required":true},{"key":"apiPrivateKey","label":"API private key","type":"secret","required":true}]'::jsonb,
           'turnkey', 'active', 10
         ),
@@ -101,7 +101,7 @@ export class FinancialControlPlane20260920000000 implements MigrationInterface {
           'privy', 'Privy',
           'Embedded wallet infrastructure for Ethereum and Solana.',
           '/img/privy_logo.svg', 'wallet_infrastructure',
-          '["wallet_operations","signing","policies"]'::jsonb,
+          '["wallet_operations"]'::jsonb,
           '[{"key":"appId","label":"App ID","type":"text","required":true},{"key":"appSecret","label":"App secret","type":"secret","required":true}]'::jsonb,
           'privy', 'active', 20
         )

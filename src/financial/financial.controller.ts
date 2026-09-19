@@ -37,6 +37,7 @@ import {
   TransferDto,
   WalletDto,
   RoutingPolicyDto,
+  ProviderHealthDto,
 } from './financial.dto';
 import {
   CurrentFinancialContext,
@@ -137,6 +138,8 @@ export class FinancialController {
     @Body() dto: WalletDto,
     @Headers('idempotency-key') key?: string,
   ) {
+    if (ctx.environment !== 'sandbox')
+      throw new BadRequestException('This compatibility route is sandbox-only');
     return this.service.wallet(ctx, dto, key);
   }
   @Post('wallets') normalizedWallet(
@@ -160,12 +163,16 @@ export class FinancialController {
   @Get('sandbox/wallets') wallets(
     @CurrentFinancialContext() ctx: FinancialContext,
   ) {
+    if (ctx.environment !== 'sandbox')
+      throw new BadRequestException('This compatibility route is sandbox-only');
     return this.service.list(ctx, 'wallet');
   }
   @Get('sandbox/wallets/:id') walletDetail(
     @CurrentFinancialContext() ctx: FinancialContext,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
+    if (ctx.environment !== 'sandbox')
+      throw new BadRequestException('This compatibility route is sandbox-only');
     return this.service.resource(ctx, id, 'wallet');
   }
   @Post('sandbox/wallets/:id/fund') fund(
@@ -229,6 +236,13 @@ export class FinancialController {
     @CurrentFinancialContext() ctx: FinancialContext,
   ) {
     return this.service.providerHealth(ctx);
+  }
+  @Post('provider-health/:provider') saveProviderHealth(
+    @CurrentFinancialContext() ctx: FinancialContext,
+    @Param('provider') provider: string,
+    @Body() dto: ProviderHealthDto,
+  ) {
+    return this.service.saveProviderHealth(ctx, provider, dto);
   }
   @Get('reconciliation') reconciliation(
     @CurrentFinancialContext() ctx: FinancialContext,
@@ -311,6 +325,13 @@ export class FinancialDashboardController {
     @CurrentFinancialContext() ctx: FinancialContext,
   ) {
     return this.service.providerHealth(ctx);
+  }
+  @Post('provider-health/:provider') saveProviderHealth(
+    @CurrentFinancialContext() ctx: FinancialContext,
+    @Param('provider') provider: string,
+    @Body() dto: ProviderHealthDto,
+  ) {
+    return this.service.saveProviderHealth(ctx, provider, dto);
   }
   @Get('reconciliation') reconciliationRuns(
     @CurrentFinancialContext() ctx: FinancialContext,

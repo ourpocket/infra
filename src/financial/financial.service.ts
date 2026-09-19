@@ -22,6 +22,7 @@ import {
   TransferDto,
   WalletDto,
   RoutingPolicyDto,
+  ProviderHealthDto,
 } from './financial.dto';
 import {
   Environment,
@@ -367,36 +368,68 @@ export class FinancialService {
         provider: In(candidates),
       },
     });
+    const payments = await this.recentPayments(ctx);
     const sample = (provider: PaymentProvider) =>
       health.find((item) => item.provider === provider);
-    const eligible = policy.requireHealthy
-      ? candidates.filter((provider) => sample(provider)?.status !== 'down')
-      : candidates;
-    if (!eligible.length)
-      throw new BadRequestException('No healthy payment provider is available');
+    const successRate = (provider: PaymentProvider) => {
+      const settled = payments.filter(
+        (item) =>
+          item.provider === provider &&
+          (item.status === 'completed' || item.status === 'failed'),
+      );
+      return settled.length
+        ? settled.filter((item) => item.status === 'completed').length /
+            settled.length
+        : null;
+    };
+    const latency = (provider: PaymentProvider) => {
+      const samples = payments
+        .filter((item) => item.provider === provider)
+        .map((item) => item.details.providerLatencyMs)
+        .filter(
+          (value): value is number =>
+            typeof value === 'number' && Number.isFinite(value) && value >= 0,
+        )
+        .sort((left, right) => left - right);
+      return samples.length
+        ? samples[Math.ceil(samples.length * 0.95) - 1]
+        : null;
+    };
     const priority = policy.providerPriority.filter((provider) =>
-      eligible.includes(provider),
+      candidates.includes(provider),
     );
-    const ranked = [...eligible].sort((left, right) => {
-      const leftHealth = sample(left);
-      const rightHealth = sample(right);
+    const priorityIndex = (provider: PaymentProvider) => {
+      const index = priority.indexOf(provider);
+      return index === -1
+        ? priority.length + candidates.indexOf(provider)
+        : index;
+    };
+    const metric = (provider: PaymentProvider) => {
+      const snapshot = sample(provider);
       if (policy.strategy === 'lowest_fees')
-        return (
-          (leftHealth?.estimatedFeeBps ?? 0) -
-          (rightHealth?.estimatedFeeBps ?? 0)
-        );
+        return snapshot?.estimatedFeeBps ?? Number.POSITIVE_INFINITY;
       if (policy.strategy === 'fastest_response')
-        return (
-          (leftHealth?.p95LatencyMs ?? 0) - (rightHealth?.p95LatencyMs ?? 0)
-        );
+        return latency(provider) ?? Number.POSITIVE_INFINITY;
       if (policy.strategy === 'best_success_rate')
-        return (
-          Number(rightHealth?.successRate ?? '100') -
-          Number(leftHealth?.successRate ?? '100')
-        );
-      return priority.indexOf(left) - priority.indexOf(right);
+        return successRate(provider) === null
+          ? Number.POSITIVE_INFINITY
+          : -successRate(provider)!;
+      return priorityIndex(provider);
+    };
+    const ranked = [...candidates].sort((left, right) => {
+      const difference = metric(left) - metric(right);
+      if (difference) return difference;
+      return priorityIndex(left) - priorityIndex(right);
     });
-    const provider = ranked[0];
+    const eligible = policy.requireHealthy
+      ? ranked.filter((provider) => sample(provider)?.status !== 'down')
+      : ranked;
+    const preferred = ranked[0];
+    if (!eligible.length || (preferred !== eligible[0] && !policy.safeFailover))
+      throw new BadRequestException(
+        'Preferred provider is down; enable pre-request failover or select a provider',
+      );
+    const provider = eligible[0];
     return {
       provider,
       decision: {
@@ -406,15 +439,26 @@ export class FinancialService {
         selected: provider,
         candidates,
         eligible,
-        health: health.map((item) => ({
-          provider: item.provider,
-          status: item.status,
-          successRate: item.successRate,
-          p95LatencyMs: item.p95LatencyMs,
-          estimatedFeeBps: item.estimatedFeeBps,
+        health: candidates.map((candidate) => ({
+          provider: candidate,
+          status: sample(candidate)?.status ?? 'unknown',
+          successRate: successRate(candidate),
+          settledCount: payments.filter(
+            (item) =>
+              item.provider === candidate &&
+              (item.status === 'completed' || item.status === 'failed'),
+          ).length,
+          p95LatencyMs: latency(candidate),
+          estimatedFeeBps: sample(candidate)?.estimatedFeeBps ?? null,
         })),
         safeFailover: policy.safeFailover,
-        reason: `selected by ${policy.strategy}`,
+        reason:
+          provider !== preferred
+            ? `preferred provider down; selected ${provider} before any provider write`
+            : !Number.isFinite(metric(provider)) &&
+                policy.strategy !== 'custom_priority'
+              ? 'no provider measurements; used configured priority'
+              : `selected by ${policy.strategy}`,
       },
     };
   }
@@ -468,12 +512,14 @@ export class FinancialService {
     const item = created.item;
     if (!item.provider)
       throw new BadRequestException('Payment provider missing');
+    let providerStartedAt: number | undefined;
     try {
       const customer = await this.resource(ctx, dto.customer, 'customer');
       const email = customer.details.email;
       if (typeof email !== 'string')
         throw new BadRequestException('Customer email missing');
       const provider = item.provider as PaymentProvider;
+      providerStartedAt = Date.now();
       const result = await this.adapters.create(
         provider,
         await this.credentials(ctx, provider),
@@ -493,6 +539,7 @@ export class FinancialService {
           ...saved.details,
           checkoutUrl: result.checkoutUrl,
           checkoutReference: result.reference,
+          providerLatencyMs: Date.now() - providerStartedAt!,
         };
         await manager.save(saved);
         await this.log(
@@ -505,13 +552,21 @@ export class FinancialService {
         return saved;
       });
     } catch (error) {
-      return this.providerFailure(ctx, item.id, error);
+      return this.providerFailure(
+        ctx,
+        item.id,
+        error,
+        providerStartedAt === undefined
+          ? undefined
+          : Date.now() - providerStartedAt,
+      );
     }
   }
   private async providerFailure(
     ctx: FinancialContext,
     id: string,
     error: unknown,
+    latencyMs?: number,
   ) {
     const rejected =
       axios.isAxiosError(error) &&
@@ -523,6 +578,7 @@ export class FinancialService {
         item.details = {
           ...item.details,
           providerOutcome: rejected ? 'rejected' : 'unknown',
+          ...(latencyMs === undefined ? {} : { providerLatencyMs: latencyMs }),
         };
         if (rejected) {
           item.status = 'failed';
@@ -719,9 +775,19 @@ export class FinancialService {
   }
   async wallet(ctx: FinancialContext, dto: WalletDto, key?: string) {
     const walletProvider = dto.provider;
+    if (ctx.environment === 'sandbox' && !dto.currency)
+      throw new BadRequestException('Fiat currency is required in Sandbox');
+    if (ctx.environment === 'sandbox' && (dto.provider || dto.chain))
+      throw new BadRequestException('Provider and chain are production-only');
     if (ctx.environment === 'production' && !walletProvider)
       throw new BadRequestException(
         'Select Turnkey or Privy for a production wallet',
+      );
+    if (ctx.environment === 'production' && !dto.chain)
+      throw new BadRequestException('Select a production wallet chain');
+    if (ctx.environment === 'production' && dto.currency)
+      throw new BadRequestException(
+        'Production chain wallets have no fiat currency or simulated balance',
       );
     const walletConfig =
       ctx.environment === 'production' && walletProvider
@@ -744,11 +810,11 @@ export class FinancialService {
         return {
           kind: 'wallet',
           status: ctx.environment === 'sandbox' ? 'completed' : 'pending',
-          currency: dto.currency,
+          currency: ctx.environment === 'sandbox' ? dto.currency : null,
           parentId: dto.customer ?? null,
           provider: walletProvider ?? null,
           details: {
-            balance: '0',
+            balance: ctx.environment === 'sandbox' ? '0' : null,
             chain: dto.chain,
             custody: ctx.environment === 'sandbox' ? 'simulated' : 'provider',
           },
@@ -765,7 +831,7 @@ export class FinancialService {
         walletConfig ?? {},
         {
           reference: item.id,
-          chain: dto.chain ?? 'ethereum',
+          chain: dto.chain!,
         },
       );
       return this.locked(ctx, async (manager) => {
@@ -947,31 +1013,96 @@ export class FinancialService {
     const records = await this.db.manager.find(FinancialProviderHealth, {
       where: { projectId: ctx.projectId, environment: ctx.environment },
     });
-    const payments = await this.list(ctx, 'payment');
+    const payments = await this.recentPayments(ctx);
     const integrations = await this.integrations(ctx);
     return paymentProviders.map((provider) => {
       const record = records.find((item) => item.provider === provider);
       const providerPayments = payments.filter(
         (item) => item.provider === provider,
       );
-      const completed = providerPayments.filter(
+      const settledPayments = providerPayments.filter(
+        (item) => item.status === 'completed' || item.status === 'failed',
+      );
+      const completed = settledPayments.filter(
         (item) => item.status === 'completed',
       ).length;
+      const latencySamples = providerPayments
+        .map((item) => item.details.providerLatencyMs)
+        .filter(
+          (value): value is number =>
+            typeof value === 'number' && Number.isFinite(value) && value >= 0,
+        )
+        .sort((left, right) => left - right);
       return {
         provider,
         connected: integrations.some(
           (item) => String(item.provider) === provider && item.isActive,
         ),
-        status: record?.status ?? 'healthy',
-        successRate:
-          record?.successRate ??
-          (providerPayments.length
-            ? ((completed / providerPayments.length) * 100).toFixed(2)
-            : '100.00'),
-        p95LatencyMs: record?.p95LatencyMs ?? 0,
-        estimatedFeeBps: record?.estimatedFeeBps ?? 0,
+        status: record?.status ?? 'unknown',
+        successRate: settledPayments.length
+          ? ((completed / settledPayments.length) * 100).toFixed(2)
+          : null,
+        settledCount: settledPayments.length,
+        p95LatencyMs: latencySamples.length
+          ? latencySamples[Math.ceil(latencySamples.length * 0.95) - 1]
+          : null,
+        latencyCount: latencySamples.length,
+        estimatedFeeBps: record?.estimatedFeeBps ?? null,
         updatedAt: record?.updatedAt ?? null,
       };
+    });
+  }
+  private recentPayments(ctx: FinancialContext) {
+    return this.db.manager.find(FinancialResource, {
+      where: {
+        projectId: ctx.projectId,
+        environment: ctx.environment,
+        kind: 'payment',
+      },
+      order: { createdAt: 'DESC' },
+      take: 1000,
+    });
+  }
+  async saveProviderHealth(
+    ctx: FinancialContext,
+    provider: string,
+    dto: ProviderHealthDto,
+  ) {
+    if (!paymentProviders.includes(provider as PaymentProvider))
+      throw new BadRequestException('Unknown payment provider');
+    return this.locked(ctx, async (manager) => {
+      const existing = await manager.findOne(FinancialProviderHealth, {
+        where: {
+          projectId: ctx.projectId,
+          environment: ctx.environment,
+          provider: provider as PaymentProvider,
+        },
+      });
+      const saved = await manager.save(
+        manager.create(FinancialProviderHealth, {
+          ...(existing ?? {}),
+          projectId: ctx.projectId,
+          environment: ctx.environment,
+          provider: provider as PaymentProvider,
+          status: dto.status,
+          estimatedFeeBps:
+            dto.estimatedFeeBps === undefined
+              ? (existing?.estimatedFeeBps ?? null)
+              : dto.estimatedFeeBps,
+        }),
+      );
+      await this.log(
+        ctx,
+        'provider.health.updated',
+        'application',
+        {
+          provider,
+          status: saved.status,
+          estimatedFeeBps: saved.estimatedFeeBps,
+        },
+        manager,
+      );
+      return saved;
     });
   }
   reconciliationRuns(ctx: FinancialContext) {

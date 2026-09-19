@@ -5,6 +5,9 @@ import {
   IsUUID,
   IsUrl,
   IsBoolean,
+  IsInt,
+  Min,
+  Max,
   IsArray,
   ArrayMinSize,
   ArrayUnique,
@@ -73,10 +76,15 @@ export class RefundDto {
   scenario?: Scenario;
 }
 export class WalletDto {
-  @ApiProperty({ example: 'NGN' })
+  @ApiPropertyOptional({
+    example: 'NGN',
+    description:
+      'Required for Sandbox fiat wallets; omit for Production chain wallets',
+  })
+  @ValidateIf((_: unknown, value: unknown) => value !== undefined)
   @Matches(/^[A-Z]{3}$/)
   @IsIn(fiatCurrencies)
-  currency!: string;
+  currency?: string;
   @ApiPropertyOptional()
   @ValidateIf((_: unknown, value: unknown) => value !== undefined)
   @IsUUID()
@@ -162,4 +170,21 @@ export class RoutingPolicyDto {
   @ApiPropertyOptional({ default: false })
   @IsBoolean()
   safeFailover!: boolean;
+}
+
+export class ProviderHealthDto {
+  @ApiProperty({ enum: ['healthy', 'degraded', 'down'] })
+  @IsIn(['healthy', 'degraded', 'down'])
+  status!: 'healthy' | 'degraded' | 'down';
+
+  @ApiPropertyOptional({
+    description: 'Configured fee estimate in basis points',
+  })
+  @ValidateIf(
+    (_: unknown, value: unknown) => value !== undefined && value !== null,
+  )
+  @IsInt()
+  @Min(0)
+  @Max(10000)
+  estimatedFeeBps?: number | null;
 }
