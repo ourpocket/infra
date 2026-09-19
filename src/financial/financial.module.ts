@@ -6,6 +6,7 @@ import { ProjectModule } from '../project/project.module';
 import { financialEntities } from './financial.entity';
 import { FinancialService } from './financial.service';
 import { PaymentAdapters } from './payment-adapters';
+import { ProviderRegistry } from '../providers/provider-registry';
 import { WalletAdapters } from './wallet-adapters';
 import {
   FinancialController,
@@ -29,6 +30,7 @@ import { FinancialRetentionService } from './financial-retention.service';
   providers: [
     FinancialService,
     PaymentAdapters,
+    ProviderRegistry,
     WalletAdapters,
     FinancialWebhooksService,
     FinancialApiGuard,

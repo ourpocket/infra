@@ -33,6 +33,8 @@ import {
   FinancialWebhookDto,
   PaymentDto,
   RefundDto,
+  PaymentVerificationDto,
+  RefundVerificationDto,
   SimulationDto,
   TransferDto,
   WalletDto,
@@ -47,13 +49,15 @@ import {
 } from './financial-auth';
 import { FinancialContext, FinancialService } from './financial.service';
 import { FinancialWebhooksService } from './financial-webhooks.service';
+import { ProviderRegistry } from '../providers/provider-registry';
 import { BadRequestException } from '@nestjs/common';
 @ApiTags('Financial API')
 @ApiBearerAuth()
 @ApiHeader({
   name: 'Idempotency-Key',
   required: false,
-  description: 'Required for creation and wallet operations',
+  description:
+    'Required for Sandbox simulation writes. Production payment idempotency is caller-controlled through the provider reference.',
 })
 @UseGuards(FinancialApiGuard)
 @UseInterceptors(FinancialRequestInterceptor)
@@ -62,9 +66,12 @@ export class FinancialController {
   constructor(
     private readonly service: FinancialService,
     private readonly catalog: ProviderCatalogService,
+    private readonly providerRegistry: ProviderRegistry,
   ) {}
   @Post('customers')
-  @ApiOperation({ summary: 'Create a normalized customer' })
+  @ApiOperation({
+    summary: 'Deprecated: OurPocket does not store end-customer profiles',
+  })
   customer(
     @CurrentFinancialContext() ctx: FinancialContext,
     @Body() dto: CustomerDto,
@@ -97,6 +104,17 @@ export class FinancialController {
   @Get('payments') payments(@CurrentFinancialContext() ctx: FinancialContext) {
     return this.service.list(ctx, 'payment');
   }
+  @Post('payments/verify')
+  @ApiOperation({
+    summary:
+      'Verify a production provider payment without persisting its result',
+  })
+  verifyByReference(
+    @CurrentFinancialContext() ctx: FinancialContext,
+    @Body() dto: PaymentVerificationDto,
+  ) {
+    return this.service.verifyPayment(ctx, dto);
+  }
   @Get('payments/:id') paymentDetail(
     @CurrentFinancialContext() ctx: FinancialContext,
     @Param('id', ParseUUIDPipe) id: string,
@@ -120,6 +138,17 @@ export class FinancialController {
   }
   @Get('refunds') refunds(@CurrentFinancialContext() ctx: FinancialContext) {
     return this.service.list(ctx, 'refund');
+  }
+  @Post('refunds/verify')
+  @ApiOperation({
+    summary:
+      'Verify a production provider refund without persisting its result',
+  })
+  verifyRefundByReference(
+    @CurrentFinancialContext() ctx: FinancialContext,
+    @Body() dto: RefundVerificationDto,
+  ) {
+    return this.service.verifyTransparentRefund(ctx, dto);
   }
   @Get('refunds/:id') refundDetail(
     @CurrentFinancialContext() ctx: FinancialContext,
@@ -261,22 +290,23 @@ export class FinancialController {
   }
   @Get('providers') async providers() {
     return (await this.catalog.listPublic()).map((provider) => {
-      const eligible =
-        provider.status === PROVIDER_CATALOG_STATUS_ENUM.ACTIVE &&
-        ['paystack', 'flutterwave'].includes(provider.slug);
-      const walletEligible =
-        provider.status === PROVIDER_CATALOG_STATUS_ENUM.ACTIVE &&
-        ['turnkey', 'privy'].includes(provider.slug);
+      const definition = this.providerRegistry.definitions.find(
+        (item) => item.id === provider.slug,
+      );
+      const active = provider.status === PROVIDER_CATALOG_STATUS_ENUM.ACTIVE;
       return {
         id: provider.id,
         name: provider.slug,
         status: provider.status,
-        capabilities: {
-          payments: eligible,
-          refunds: eligible,
-          wallets: walletEligible,
-          transfers: provider.capabilities.includes('transfers' as never),
-        },
+        capabilities: definition
+          ? Object.fromEntries(
+              [...definition.capabilities].map((capability) => [
+                capability,
+                active,
+              ]),
+            )
+          : {},
+        activationRequired: Boolean(definition),
       };
     });
   }
@@ -393,14 +423,20 @@ export class ProviderEventsController {
     @Param('provider') provider: string,
     @Req() req: RawBodyRequest<Request>,
   ) {
-    if (provider !== 'paystack' && provider !== 'flutterwave')
+    if (
+      provider !== 'paystack' &&
+      provider !== 'flutterwave' &&
+      provider !== 'mono'
+    )
       throw new BadRequestException('Unsupported provider');
     if (!req.rawBody) throw new BadRequestException('Raw webhook body missing');
     const signature =
       req.headers[
         provider === 'paystack'
           ? 'x-paystack-signature'
-          : 'flutterwave-signature'
+          : provider === 'mono'
+            ? 'mono-webhook-secret'
+            : 'flutterwave-signature'
       ];
     return this.webhooks.receive(
       { projectId, environment: 'production', requestId: requestId(req) },
@@ -409,6 +445,9 @@ export class ProviderEventsController {
       typeof signature === 'string' ? signature : undefined,
       typeof req.headers['verif-hash'] === 'string'
         ? req.headers['verif-hash']
+        : undefined,
+      typeof req.headers['mono-webhook-secret'] === 'string'
+        ? req.headers['mono-webhook-secret']
         : undefined,
     );
   }

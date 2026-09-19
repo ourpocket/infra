@@ -38,7 +38,7 @@ describe('Hosted payment adapters', () => {
         reference,
         amount: '50001',
         currency: 'NGN',
-        email: 'customer@example.test',
+        contact: { email: 'customer@example.test' },
       }),
     ).toEqual({
       reference,
@@ -81,7 +81,7 @@ describe('Hosted payment adapters', () => {
       reference,
       amount: '50001',
       currency: 'NGN',
-      email: 'customer@example.test',
+      contact: { email: 'customer@example.test' },
       callbackUrl: 'https://merchant.example.test/return',
     });
     nock('https://api.flutterwave.com')
@@ -184,7 +184,8 @@ describe('Hosted payment adapters', () => {
         reference,
         amount: '1',
         currency: 'NGN',
-        email: 'customer@example.test',
+        contact: { email: 'customer@example.test' },
+        callbackUrl: 'https://merchant.example.test/return',
       }),
     ).rejects.toThrow();
   });

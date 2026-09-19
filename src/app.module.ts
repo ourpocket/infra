@@ -23,6 +23,7 @@ import { TransactionsModule } from './transactions/transactions.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { UsageModule } from './usage/usage.module';
 import { ProviderCatalogModule } from './provider-catalog/provider-catalog.module';
+import { HealthModule } from './health/health.module';
 
 const TypeORMConfigModule = TypeOrmModule.forRootAsync({
   imports: [NestConfigModule],
@@ -47,6 +48,7 @@ const TypeORMConfigModule = TypeOrmModule.forRootAsync({
     WebhooksModule,
     UsageModule,
     ProviderCatalogModule,
+    HealthModule,
     ThrottlerModule.forRoot({
       throttlers: [
         {

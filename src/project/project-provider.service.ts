@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Optional,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -11,6 +12,7 @@ import { ProjectProviderRepository } from './project-provider.repository';
 import { ProjectRepository } from './project.repository';
 import { ProviderCatalogService } from '../provider-catalog/provider-catalog.service';
 import { ConnectProjectProviderDto } from './dto/connect-project-provider.dto';
+import { ProviderRegistry } from '../providers/provider-registry';
 
 interface EncryptedProviderConfig {
   encrypted: true;
@@ -25,6 +27,8 @@ export class ProjectProviderService {
     private readonly projectProviderRepository: ProjectProviderRepository,
     private readonly projectRepository: ProjectRepository,
     private readonly providerCatalogService: ProviderCatalogService,
+    @Optional()
+    private readonly providerRegistry: ProviderRegistry = new ProviderRegistry(),
   ) {}
 
   async connectProvider(
@@ -64,6 +68,8 @@ export class ProjectProviderService {
       existing.environment = environment;
       existing.config = this.encryptConfig(dto.config);
       existing.isActive = dto.isActive ?? true;
+      existing.isVerified = false;
+      existing.verifiedAt = null;
       const saved = await this.projectProviderRepository.save(existing);
       return this.sanitizeProvider(saved);
     }
@@ -76,6 +82,8 @@ export class ProjectProviderService {
       type: catalogProvider.adapterType,
       config: this.encryptConfig(dto.config),
       isActive: dto.isActive ?? true,
+      isVerified: false,
+      verifiedAt: null,
     });
 
     const saved = await this.projectProviderRepository.save(provider);
@@ -97,22 +105,11 @@ export class ProjectProviderService {
       throw new NotFoundException('Project not found');
     }
 
-    if (
-      ![PROVIDER_TYPE_ENUM.PAYSTACK, PROVIDER_TYPE_ENUM.FLUTTERWAVE].includes(
-        dto.type,
-      )
-    )
+    if (!this.providerRegistry.isPaymentProvider(dto.type))
       throw new UnauthorizedException(
         'Provider is not available for financial operations',
       );
-    if (
-      dto.type === PROVIDER_TYPE_ENUM.FLUTTERWAVE &&
-      (typeof dto.config.webhookSecret !== 'string' ||
-        !dto.config.webhookSecret.trim())
-    )
-      throw new UnauthorizedException('Provider webhook secret is required');
-    if (typeof dto.config.apiKey !== 'string' || !dto.config.apiKey.trim())
-      throw new UnauthorizedException('Provider API key is required');
+    this.providerRegistry.parseConfig(dto.type, dto.config);
     const existing = await this.projectProviderRepository.findOne({
       where: { project: { id: projectId }, type: dto.type, environment },
     });
@@ -123,6 +120,8 @@ export class ProjectProviderService {
       existing.environment = environment;
       existing.config = this.encryptConfig(dto.config);
       existing.isActive = dto.isActive ?? true;
+      existing.isVerified = false;
+      existing.verifiedAt = null;
       const saved = await this.projectProviderRepository.save(existing);
       return this.sanitizeProvider(saved);
     }
@@ -133,10 +132,46 @@ export class ProjectProviderService {
       type: dto.type,
       config: this.encryptConfig(dto.config),
       isActive: dto.isActive ?? true,
+      isVerified: false,
+      verifiedAt: null,
     });
 
     const saved = await this.projectProviderRepository.save(provider);
     return this.sanitizeProvider(saved);
+  }
+
+  async validateProvider(
+    userId: string,
+    projectId: string,
+    type: PROVIDER_TYPE_ENUM,
+    environment: 'sandbox' | 'production' = 'production',
+  ): Promise<ProjectProvider> {
+    if (environment !== 'production')
+      throw new UnauthorizedException(
+        'External provider validation is production-only',
+      );
+    const project = await this.projectRepository.findByIdAndUserId(
+      projectId,
+      userId,
+    );
+    if (!project) throw new NotFoundException('Project not found');
+    if (!this.providerRegistry.isPaymentProvider(type))
+      throw new UnauthorizedException(
+        'Provider validation is unavailable for this provider',
+      );
+    const provider = await this.projectProviderRepository.findOne({
+      where: { project: { id: projectId }, type, environment },
+    });
+    if (!provider) throw new NotFoundException('Provider is not connected');
+    const config = this.decryptConfig(provider.config);
+    await this.providerRegistry
+      .adapter(type)
+      .validateConnection(this.providerRegistry.apiKey(type, config));
+    provider.isVerified = true;
+    provider.verifiedAt = new Date();
+    return this.sanitizeProvider(
+      await this.projectProviderRepository.save(provider),
+    );
   }
 
   async listProvidersForProject(

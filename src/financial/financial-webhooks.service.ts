@@ -9,22 +9,21 @@ import {
 import { Interval } from '@nestjs/schedule';
 import { DataSource, LessThan } from 'typeorm';
 import { Queue, Worker } from 'bullmq';
-import { createHash, createHmac, randomBytes } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import { request } from 'node:https';
-import { z } from 'zod';
 import { Webhook } from '../entities/webhook.entity';
 import { ProjectProviderService } from '../project/project-provider.service';
+import { ProviderRegistry } from '../providers/provider-registry';
 import { PROVIDER_TYPE_ENUM } from '../enums';
 import { FinancialContext, FinancialService } from './financial.service';
 import {
   FinancialDelivery,
   FinancialEvent,
-  FinancialReceipt,
   FinancialResource,
   PaymentProvider,
 } from './financial.entity';
 import { FinancialWebhookDto } from './financial.dto';
-import { equalSignature, redact } from './financial-utils';
+import { redact } from './financial-utils';
 import { webhookDestination } from './webhook-destination';
 export const retryDelays = [60000, 300000, 1800000, 7200000, 43200000];
 const eventTypes = [
@@ -56,6 +55,7 @@ export class FinancialWebhooksService implements OnModuleInit, OnModuleDestroy {
     private readonly db: DataSource,
     private readonly financial: FinancialService,
     private readonly providers: ProjectProviderService,
+    private readonly providerRegistry: ProviderRegistry,
   ) {}
   onModuleInit() {
     if (process.env.FINANCIAL_WEBHOOK_WORKER !== 'true') return;
@@ -100,6 +100,9 @@ export class FinancialWebhooksService implements OnModuleInit, OnModuleDestroy {
           .getRepository(FinancialEvent)
           .createQueryBuilder('event')
           .where('event.dispatched = false')
+          .andWhere('event.environment != :production', {
+            production: 'production',
+          })
           .orderBy('event.createdAt', 'ASC')
           .take(50)
           .setLock('pessimistic_write')
@@ -239,15 +242,12 @@ export class FinancialWebhooksService implements OnModuleInit, OnModuleDestroy {
       }),
     );
   }
-  async test(ctx: FinancialContext) {
-    if (ctx.environment !== 'sandbox')
-      throw new BadRequestException('Test events are sandbox-only');
-    const resource = await this.financial.customer(
-      ctx,
-      { email: 'sandbox@example.test', name: 'Webhook test' },
-      `webhook-test-${ctx.requestId}`,
+  test(_ctx: FinancialContext): Promise<never> {
+    return Promise.reject(
+      new BadRequestException(
+        'Test event creation is unavailable because OurPocket does not persist customer or provider event data',
+      ),
     );
-    return { resourceId: resource.id, event: 'customer.created' };
   }
   async deliver(id: string) {
     const claim = await this.db.transaction(async (manager) => {
@@ -407,135 +407,33 @@ export class FinancialWebhooksService implements OnModuleInit, OnModuleDestroy {
     raw: Buffer,
     signature?: string,
     legacySignature?: string,
+    monoSignature?: string,
   ) {
+    if (ctx.environment !== 'production')
+      throw new BadRequestException('Provider webhooks are production-only');
     const config = await this.providers.getProviderConfigForProject(
       ctx.projectId,
-      provider === 'paystack'
-        ? PROVIDER_TYPE_ENUM.PAYSTACK
-        : PROVIDER_TYPE_ENUM.FLUTTERWAVE,
+      provider as PROVIDER_TYPE_ENUM,
       'production',
     );
-    const secret =
-      provider === 'paystack' ? config.apiKey : config.webhookSecret;
-    if (typeof secret !== 'string' || !secret)
-      throw new UnauthorizedException('Provider webhook secret missing');
-    const expected = createHmac(
-      provider === 'paystack' ? 'sha512' : 'sha256',
-      secret,
-    )
-      .update(raw)
-      .digest(provider === 'paystack' ? 'hex' : 'base64');
-    if (
-      !(signature
-        ? equalSignature(expected, signature)
-        : provider === 'flutterwave' && equalSignature(secret, legacySignature))
-    )
+    const verified = this.providerRegistry.adapter(provider).verifyWebhook(
+      raw,
+      {
+        'x-paystack-signature': signature,
+        'flutterwave-signature': signature,
+        'verif-hash': legacySignature,
+        'mono-webhook-secret': monoSignature,
+      },
+      config,
+    );
+    if (!verified)
       throw new UnauthorizedException('Invalid provider signature');
-    const body = z
-      .object({
-        event: z.string().optional(),
-        type: z.string().optional(),
-        data: z.object({
-          reference: z.string().optional(),
-          tx_ref: z.string().optional(),
-          id: z.union([z.string(), z.number()]).optional(),
-        }),
-      })
-      .parse(JSON.parse(raw.toString('utf8')));
-    const hash = createHash('sha256')
-      .update(provider)
-      .update(raw)
-      .digest('hex');
-    // Persist the authenticated receipt before provider verification. A restart or an early refund notification is recoverable.
-    await this.db.manager
-      .createQueryBuilder()
-      .insert()
-      .into(FinancialReceipt)
-      .values({
-        projectId: ctx.projectId,
-        environment: ctx.environment,
-        hash,
-        provider,
-        payload: {
-          event: body.event ?? body.type ?? '',
-          reference: body.data.reference,
-          tx_ref: body.data.tx_ref,
-          id: body.data.id,
-        },
-      })
-      .orIgnore()
-      .execute();
-    const receipt = await this.db.manager.findOneByOrFail(FinancialReceipt, {
-      projectId: ctx.projectId,
-      environment: ctx.environment,
-      hash,
-    });
-    await this.processReceipt(ctx, receipt);
+    // This endpoint only authenticates delivery. Provider payloads and outcomes
+    // are intentionally never queued, logged, or persisted by OurPocket.
     return { received: true };
   }
-  private async processReceipt(
-    ctx: FinancialContext,
-    receipt: FinancialReceipt,
-  ) {
-    if (receipt.processed) return;
-    const payload = receipt.payload;
-    if (
-      typeof payload.event === 'string' &&
-      payload.event.startsWith('refund')
-    ) {
-      const item = await this.db.manager.findOne(FinancialResource, {
-        where: {
-          projectId: ctx.projectId,
-          environment: ctx.environment,
-          kind: 'refund',
-          provider: receipt.provider,
-          providerReference: String(payload.id),
-        },
-      });
-      if (!item) return; // The initiation response may not yet have stored the provider's refund ID.
-      await this.financial.verifyRefund(ctx, item.id);
-    } else {
-      const reference =
-        receipt.provider === 'paystack' ? payload.reference : payload.tx_ref;
-      if (
-        typeof reference === 'string' &&
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-          reference,
-        )
-      ) {
-        const item = await this.financial.resource(ctx, reference, 'payment');
-        if (item.provider !== receipt.provider)
-          throw new UnauthorizedException('Provider mismatch');
-        await this.financial.verify(ctx, item.id);
-      }
-    }
-    await this.db.manager.update(FinancialReceipt, receipt.id, {
-      processed: true,
-    });
-  }
   @Interval(30000)
-  async recoverReceipts() {
-    const receipts = await this.db.manager.find(FinancialReceipt, {
-      where: { processed: false },
-      order: { createdAt: 'ASC' },
-      take: 100,
-    });
-    for (const receipt of receipts) {
-      const ctx: FinancialContext = {
-        projectId: receipt.projectId,
-        environment: receipt.environment,
-        requestId: receipt.id,
-      };
-      try {
-        await this.processReceipt(ctx, receipt);
-      } catch {
-        await this.financial.log(
-          ctx,
-          'webhooks.receipt_verification',
-          'provider',
-          { outcome: 'pending' },
-        );
-      }
-    }
+  recoverReceipts(): void {
+    // Production receipts are intentionally never stored or recovered.
   }
 }

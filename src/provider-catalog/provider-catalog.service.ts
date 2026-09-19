@@ -122,6 +122,7 @@ export class ProviderCatalogService {
       ![
         PROVIDER_TYPE_ENUM.PAYSTACK,
         PROVIDER_TYPE_ENUM.FLUTTERWAVE,
+        PROVIDER_TYPE_ENUM.MONO,
         PROVIDER_TYPE_ENUM.TURNKEY,
         PROVIDER_TYPE_ENUM.PRIVY,
       ].includes(adapterType)

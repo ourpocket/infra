@@ -14,7 +14,7 @@ export type ResourceKind =
   | 'wallet'
   | 'transfer';
 export type OperationStatus = 'pending' | 'unknown' | 'completed' | 'failed';
-export type PaymentProvider = 'paystack' | 'flutterwave';
+export type PaymentProvider = 'paystack' | 'flutterwave' | 'mono';
 export type WalletProvider = 'turnkey' | 'privy';
 export type FinancialProvider = PaymentProvider | WalletProvider;
 @Entity('financial_resources')

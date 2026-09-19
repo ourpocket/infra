@@ -49,6 +49,12 @@ export class ProjectProvider {
   @Column({ type: 'boolean', default: true })
   isActive!: boolean;
 
+  @Column({ type: 'boolean', name: 'is_verified', default: false })
+  isVerified!: boolean;
+
+  @Column({ type: 'timestamp', name: 'verified_at', nullable: true })
+  verifiedAt!: Date | null;
+
   @CreateDateColumn()
   createdAt!: Date;
 

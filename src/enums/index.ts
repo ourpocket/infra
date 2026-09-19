@@ -16,6 +16,7 @@ enum USERS_STATUS_ENUM {
 enum PROVIDER_TYPE_ENUM {
   PAYSTACK = 'paystack',
   FLUTTERWAVE = 'flutterwave',
+  MONO = 'mono',
   TURNKEY = 'turnkey',
   PRIVY = 'privy',
   PAGA = 'paga',
@@ -46,6 +47,12 @@ enum PROVIDER_CAPABILITY_ENUM {
   IDENTITY_VERIFICATION = 'identity_verification',
   TRANSFERS = 'transfers',
   SIGNING = 'signing',
+  HOSTED_CHECKOUT = 'hosted_checkout',
+  PAYMENT_VERIFICATION = 'payment_verification',
+  PAYOUTS = 'payouts',
+  VIRTUAL_ACCOUNTS = 'virtual_accounts',
+  RECURRING_PAYMENTS = 'recurring_payments',
+  ACCOUNT_LINKING = 'account_linking',
   POLICIES = 'policies',
 }
 

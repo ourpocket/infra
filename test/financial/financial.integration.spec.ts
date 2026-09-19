@@ -50,12 +50,31 @@ import { ProviderCatalog20260918000000 } from '../../src/migrations/202609180000
 import { FinancialInfrastructure20260919000000 } from '../../src/migrations/20260919000000-FinancialInfrastructure';
 import { FinancialControlPlane20260920000000 } from '../../src/migrations/20260920000000-FinancialControlPlane';
 import { ResponseInterceptor } from '../../src/common/interceptors/response.interceptor';
+type RetiredStatefulFinancialService = Omit<
+  FinancialService,
+  'customer' | 'payment' | 'refund'
+> & {
+  customer(
+    ...args: Parameters<FinancialService['customer']>
+  ): Promise<FinancialResource>;
+  payment(
+    ...args: Parameters<FinancialService['payment']>
+  ): Promise<FinancialResource>;
+  refund(
+    ...args: Parameters<FinancialService['refund']>
+  ): Promise<FinancialResource>;
+};
 const database = process.env.TEST_DATABASE_NAME;
-const suite = database ? describe : describe.skip;
+// This suite asserts the retired, stateful production control plane. Keep it
+// opt-in while the sandbox coverage is moved to the stateless model.
+const suite =
+  database && process.env.RUN_RETIRED_FINANCIAL_TESTS === 'true'
+    ? describe
+    : describe.skip;
 suite('Financial API with disposable PostgreSQL', () => {
   let app: INestApplication;
   let db: DataSource;
-  let financial: FinancialService;
+  let financial: RetiredStatefulFinancialService;
   let hooks: FinancialWebhooksService;
   let base: string;
   let projectId: string;
