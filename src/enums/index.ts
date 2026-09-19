@@ -35,6 +35,8 @@ enum PROVIDER_CATEGORY_ENUM {
 }
 
 enum PROVIDER_CAPABILITY_ENUM {
+  PAYMENTS = 'payments',
+  REFUNDS = 'refunds',
   WALLET_OPERATIONS = 'wallet_operations',
   PAYMENT_COLLECTION = 'payment_collection',
   BANK_DATA = 'bank_data',

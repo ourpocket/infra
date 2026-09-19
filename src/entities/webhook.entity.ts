@@ -27,6 +27,9 @@ export class Webhook {
   @Column({ type: 'varchar', length: 255 })
   secret!: string;
 
+  @Column({ type: 'varchar', nullable: true })
+  environment!: 'sandbox' | 'production' | null;
+
   @Column({ type: 'boolean', default: true })
   isActive!: boolean;
 

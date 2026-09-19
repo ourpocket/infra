@@ -106,7 +106,7 @@ describe('ProjectApiKeyService', () => {
       });
       expect(projectApiKeyRepository.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          encryptedKey: expect.any(String),
+          encryptedKey: null,
         }),
       );
       expect(projectApiKeyRepository.save).toHaveBeenCalled();

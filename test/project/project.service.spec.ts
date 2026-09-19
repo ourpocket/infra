@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ProjectApiKey } from '../../src/entities/project-api-key.entity';
 import { ProjectService } from '../../src/project/project.service';
 import { ProjectRepository } from '../../src/project/project.repository';
 import { PlatformAccountRepository } from '../../src/platform-account/platform-account.repository';
@@ -11,6 +12,21 @@ describe('ProjectService', () => {
 
   beforeEach(async () => {
     projectRepository = {
+      manager: {
+        transaction: jest.fn((callback) =>
+          Promise.resolve(
+            callback({
+              save: (entity) =>
+                Promise.resolve(
+                  entity instanceof ProjectApiKey
+                    ? entity
+                    : projectRepository.save(entity),
+                ),
+              create: (entity, fields) => Object.assign(new entity(), fields),
+            }),
+          ),
+        ),
+      },
       findBySlugAndPlatformAccountId: jest.fn(),
       create: jest.fn(),
       save: jest.fn(),
@@ -64,7 +80,8 @@ describe('ProjectService', () => {
       projectRepository.save.mockResolvedValue(savedProject);
 
       const result = await service.createProject(userId, dto);
-      expect(result).toEqual(savedProject);
+      expect(result).toMatchObject(savedProject);
+      expect(result.sandboxKey).toMatch(/^op_test_sk_/);
       expect(projectRepository.save).toHaveBeenCalledWith(savedProject);
     });
 

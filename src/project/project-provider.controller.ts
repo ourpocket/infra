@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Headers,
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -33,11 +42,13 @@ export class ProjectProviderController {
     @CurrentUser('userId') userId: string,
     @Param('projectId') projectId: string,
     @Body() dto: ConfigureProjectProviderDto,
+    @Headers('x-environment') environment?: string,
   ) {
     return this.projectProviderService.configureProvider(
       userId,
       projectId,
       dto,
+      connectionEnvironment(environment),
     );
   }
 
@@ -49,8 +60,14 @@ export class ProjectProviderController {
     @CurrentUser('userId') userId: string,
     @Param('projectId') projectId: string,
     @Body() dto: ConnectProjectProviderDto,
+    @Headers('x-environment') environment?: string,
   ) {
-    return this.projectProviderService.connectProvider(userId, projectId, dto);
+    return this.projectProviderService.connectProvider(
+      userId,
+      projectId,
+      dto,
+      connectionEnvironment(environment),
+    );
   }
 
   @Get()
@@ -64,10 +81,18 @@ export class ProjectProviderController {
   listProviders(
     @CurrentUser('userId') userId: string,
     @Param('projectId') projectId: string,
+    @Headers('x-environment') environment?: string,
   ) {
     return this.projectProviderService.listProvidersForProject(
       userId,
       projectId,
+      environment ? connectionEnvironment(environment) : undefined,
     );
   }
+}
+
+function connectionEnvironment(value?: string): 'sandbox' | 'production' {
+  if (value === undefined || value === 'production') return 'production';
+  if (value === 'sandbox') return 'sandbox';
+  throw new BadRequestException('Invalid environment');
 }

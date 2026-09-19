@@ -1,3 +1,4 @@
+import { FinancialModule } from './financial/financial.module';
 import { Module } from '@nestjs/common';
 import { WalletProviderModule } from './wallet-provider/wallet-provider.module';
 import { AppController } from './app.controller';
@@ -45,6 +46,7 @@ const TypeORMConfigModule = TypeOrmModule.forRootAsync({
     WebhooksModule,
     UsageModule,
     ProviderCatalogModule,
+    FinancialModule,
     ThrottlerModule.forRoot({
       throttlers: [
         {

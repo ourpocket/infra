@@ -14,6 +14,7 @@ describe('ProjectProviderService', () => {
 
   beforeEach(async () => {
     projectProviderRepository = {
+      findOne: jest.fn(),
       findByProjectIdAndType: jest.fn(),
       findByProjectIdAndProviderId: jest.fn(),
       save: jest.fn(),
@@ -75,9 +76,7 @@ describe('ProjectProviderService', () => {
     it('should update existing provider if found', async () => {
       projectRepository.findByIdAndUserId.mockResolvedValue({ id: projectId });
       const existingProvider = { id: 'prov-1', ...dto };
-      projectProviderRepository.findByProjectIdAndType.mockResolvedValue(
-        existingProvider,
-      );
+      projectProviderRepository.findOne.mockResolvedValue(existingProvider);
       projectProviderRepository.save.mockResolvedValue(existingProvider);
 
       const result = await service.configureProvider(userId, projectId, dto);
@@ -101,7 +100,7 @@ describe('ProjectProviderService', () => {
 
     it('should create new provider if not found', async () => {
       projectRepository.findByIdAndUserId.mockResolvedValue({ id: projectId });
-      projectProviderRepository.findByProjectIdAndType.mockResolvedValue(null);
+      projectProviderRepository.findOne.mockResolvedValue(null);
       const newProvider = { id: 'prov-2', ...dto };
       projectProviderRepository.create.mockReturnValue(newProvider);
       projectProviderRepository.save.mockResolvedValue(newProvider);
@@ -161,9 +160,7 @@ describe('ProjectProviderService', () => {
 
       projectRepository.findByIdAndUserId.mockResolvedValue(project);
       providerCatalogService.findConnectable.mockResolvedValue(catalogProvider);
-      projectProviderRepository.findByProjectIdAndProviderId.mockResolvedValue(
-        null,
-      );
+      projectProviderRepository.findOne.mockResolvedValue(null);
       projectProviderRepository.create.mockReturnValue(createdProvider);
       projectProviderRepository.save.mockResolvedValue(createdProvider);
 

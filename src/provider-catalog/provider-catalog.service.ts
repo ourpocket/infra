@@ -121,7 +121,9 @@ export class ProviderCatalogService {
   ): asserts adapterType is PROVIDER_TYPE_ENUM {
     if (
       !adapterType ||
-      !this.routingEngineService.listSupportedProviders().includes(adapterType)
+      ![PROVIDER_TYPE_ENUM.PAYSTACK, PROVIDER_TYPE_ENUM.FLUTTERWAVE].includes(
+        adapterType,
+      )
     ) {
       throw new BadRequestException(
         'An active provider must use a registered routing adapter',

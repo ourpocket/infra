@@ -5,7 +5,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
 
 export async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { rawBody: true });
   app.enableCors({
     origin: '*',
   });
@@ -28,7 +28,7 @@ export async function bootstrap() {
   const config = new DocumentBuilder()
     .setTitle('Our Pocket API')
     .setDescription(
-      'Developer-first wallet orchestration API for project API keys, unified wallets, transactions, webhooks, provider rails, and smart routing.',
+      'Financial infrastructure for developers: normalized payments, refunds, sandbox fiat wallets, unified events, webhook delivery, and API logs.',
     )
     .setVersion('1.0')
     .addBearerAuth({

@@ -43,6 +43,9 @@ export class ProjectProvider {
   @Column({ type: 'jsonb', nullable: true })
   config!: Record<string, any>;
 
+  @Column({ type: 'varchar', nullable: true })
+  environment!: 'sandbox' | 'production' | null;
+
   @Column({ type: 'boolean', default: true })
   isActive!: boolean;
 

@@ -13,6 +13,7 @@ const environmentSchema = z
       z.string().trim().min(1, 'JWT_SECRET is required'),
     ),
     JWT_EXPIRES_IN: z.string().trim().min(1).default('1d'),
+    PROVIDER_CONFIG_ENCRYPTION_KEY: z.string().trim().min(32).optional(),
     DATABASE_URL: optionalNonEmptyString,
     DATABASE_HOST: optionalNonEmptyString,
     DATABASE_PORT: z.coerce.number().int().min(1).max(65535).default(5432),
@@ -26,6 +27,16 @@ const environmentSchema = z
   })
   .passthrough()
   .superRefine((environment, context) => {
+    if (
+      environment.NODE_ENV === 'production' &&
+      !environment.PROVIDER_CONFIG_ENCRYPTION_KEY
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['PROVIDER_CONFIG_ENCRYPTION_KEY'],
+        message: 'A dedicated encryption key is required in production',
+      });
+    }
     if (environment.DATABASE_URL) {
       return;
     }

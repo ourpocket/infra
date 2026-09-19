@@ -147,74 +147,21 @@ describe('RoutingEngineService', () => {
     ).toThrow(BadRequestException);
   });
 
-  it('dispatches wallet creation to the selected provider', async () => {
-    flutterwaveService.createWallet.mockResolvedValue({ status: 'success' });
-
-    await expect(
-      service.executeProviderAction(
-        {
-          provider: PROVIDER_TYPE_ENUM.FLUTTERWAVE,
-          apiKey: 'flw-key',
-        },
-        WALLET_ACTION_ENUM.CREATE_WALLET,
-        {
-          tx_ref: 'wallet_user_12345',
-        },
-      ),
-    ).resolves.toEqual({ status: 'success' });
-
-    expect(flutterwaveService.createWallet).toHaveBeenCalledWith('flw-key', {
-      tx_ref: 'wallet_user_12345',
-    });
-  });
-
-  it('executes provider deposit before ledger credit', async () => {
-    paystackService.deposit.mockResolvedValue({ status: true });
-    ledgerService.executeTransaction.mockResolvedValue({ id: 'ledger-tx' });
-
-    await expect(
-      service.executeProviderAction(
-        {
-          provider: PROVIDER_TYPE_ENUM.PAYSTACK,
-          apiKey: 'paystack-key',
-        },
-        WALLET_ACTION_ENUM.DEPOSIT,
-        {
-          amount: '5000',
-          ledger: {
-            projectId: 'project-id',
-            reference: 'ref_credit_10001',
-            type: 'credit',
-            entries: [
-              {
-                walletId: 'wallet-id',
-                amount: '5000',
-                entryType: 'credit',
-              },
-            ],
-          },
-        },
-      ),
-    ).resolves.toEqual({
-      provider: { status: true },
-      ledger: { id: 'ledger-tx' },
-      selectedProvider: PROVIDER_TYPE_ENUM.PAYSTACK,
-    });
-
-    expect(paystackService.deposit).toHaveBeenCalledWith('paystack-key', {
-      amount: '5000',
-    });
-    expect(ledgerService.executeTransaction).toHaveBeenCalledWith({
-      projectId: 'project-id',
-      reference: 'ref_credit_10001',
-      type: 'credit',
-      entries: [
-        {
-          walletId: 'wallet-id',
-          amount: '5000',
-          entryType: 'credit',
-        },
-      ],
-    });
+  it('rejects legacy wallet writes without contacting providers or the external ledger', async () => {
+    for (const action of [
+      WALLET_ACTION_ENUM.CREATE_WALLET,
+      WALLET_ACTION_ENUM.DEPOSIT,
+    ]) {
+      await expect(
+        service.executeProviderAction(
+          { provider: PROVIDER_TYPE_ENUM.PAYSTACK, apiKey: 'fixture' },
+          action,
+          { amount: '5000' },
+        ),
+      ).rejects.toThrow(BadRequestException);
+    }
+    expect(paystackService.deposit).not.toHaveBeenCalled();
+    expect(flutterwaveService.createWallet).not.toHaveBeenCalled();
+    expect(ledgerService.executeTransaction).not.toHaveBeenCalled();
   });
 });
