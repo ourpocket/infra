@@ -25,6 +25,8 @@ import { AuthModule } from '../../src/auth/auth.module';
 import { User } from '../../src/entities/user.entity';
 import { PlatformAccount } from '../../src/entities/platform-account.entity';
 import { Project } from '../../src/entities/project.entity';
+import { Wallet } from '../../src/entities/wallet.entity';
+import { WalletsModule } from '../../src/wallets/wallets.module';
 import { ProviderCatalog } from '../../src/entities/provider-catalog.entity';
 import { ProjectApiKeyService } from '../../src/project/project-api-key.service';
 import { ProjectService } from '../../src/project/project.service';
@@ -86,6 +88,7 @@ suite('Financial API with disposable PostgreSQL', () => {
         }),
         ScheduleModule.forRoot(),
         FinancialModule,
+        WalletsModule,
         AuthModule,
       ],
     })
@@ -197,6 +200,48 @@ suite('Financial API with disposable PostgreSQL', () => {
     await expect(
       financial.resource({ ...ctx, projectId: randomUUID() }, body.data.id),
     ).rejects.toThrow('Resource not found');
+  });
+  it('serves normalized wallet routes and preserves legacy wallet reads', async () => {
+    const created = await fetch(`${base}/wallets`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${sandboxKey}`,
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'normalized-wallet-http',
+      },
+      body: JSON.stringify({ currency: 'NGN' }),
+    });
+    expect(created.status).toBe(201);
+    const wallet = (await created.json()).data;
+    expect(wallet).toMatchObject({
+      kind: 'wallet',
+      environment: 'sandbox',
+      currency: 'NGN',
+      details: { balance: '0' },
+    });
+    const normalized = await fetch(`${base}/wallets/${wallet.id}`, {
+      headers: { Authorization: `Bearer ${sandboxKey}` },
+    });
+    expect((await normalized.json()).data.id).toBe(wallet.id);
+    const legacy = await db.manager.save(
+      Wallet,
+      db.manager.create(Wallet, {
+        project: { id: projectId } as Project,
+        currency: 'NGN',
+      }),
+    );
+    const compatibility = await fetch(`${base}/wallets/${legacy.id}`, {
+      headers: { Authorization: `Bearer ${sandboxKey}` },
+    });
+    expect((await compatibility.json()).data).toMatchObject({
+      environment: 'legacy',
+      balance: null,
+      wallet: { id: legacy.id },
+    });
+    const legacyAlias = await fetch(`${base}/wallets/legacy/${legacy.id}`, {
+      headers: { Authorization: `Bearer ${sandboxKey}` },
+    });
+    expect((await legacyAlias.json()).data.wallet.id).toBe(legacy.id);
   });
   it('deduplicates concurrent requests and rejects changed payloads', async () => {
     const dto = { amount: '1000', currency: 'NGN', customer: customer.id };

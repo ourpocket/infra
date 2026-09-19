@@ -41,12 +41,12 @@ const TypeORMConfigModule = TypeOrmModule.forRootAsync({
     ApiKeyModule,
     UserProviderModule,
     ProjectModule,
+    FinancialModule,
     WalletsModule,
     TransactionsModule,
     WebhooksModule,
     UsageModule,
     ProviderCatalogModule,
-    FinancialModule,
     ThrottlerModule.forRoot({
       throttlers: [
         {

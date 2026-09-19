@@ -42,21 +42,8 @@ export class WalletsController {
     return this.walletsService.createWallet(apiKey, dto);
   }
 
-  @Post()
-  @ApiOperation({
-    summary: 'Create a wallet using the legacy route',
-    description: 'Alias for POST /wallets/create.',
-  })
-  @ApiResponse({ status: 201, description: 'Wallet created' })
-  createWalletLegacy(@Req() req: Request, @Body() dto: CreateWalletRequestDto) {
-    const apiKey = this.resolveApiKey(req);
-    return this.walletsService.createWallet(apiKey, dto);
-  }
-
-  @Get(':id')
-  @ApiOperation({ summary: 'Get wallet balance and details' })
-  @ApiResponse({ status: 200, description: 'Wallet retrieved' })
-  @ApiResponse({ status: 404, description: 'Wallet not found' })
+  @Get('legacy/:id')
+  @ApiOperation({ summary: 'Read a legacy wallet record' })
   getWallet(@Req() req: Request, @Param('id') id: string) {
     const apiKey = this.resolveApiKey(req);
     return this.walletsService.getWallet(apiKey, id);
